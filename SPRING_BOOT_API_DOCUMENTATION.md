@@ -3,7 +3,7 @@
 ## Overview
 This document provides comprehensive documentation for the Cardiovascular Management System (CVMS) Spring Boot backend API. The system manages patients, surgical procedures, vital data, appointments, doctor analysis, and prescriptions with role-based access control.
 
-## Base URL
+## Base URLs
 ```
 http://localhost:8080/api
 ```
