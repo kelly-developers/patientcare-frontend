@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService, LoginRequest, SignupRequest } from '@/services/authService';
-import { getToken, getUser, setUser } from '@/config/api';
+import { getToken, getUser, setUser, removeTokens } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface User {
@@ -70,9 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await authService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
     } finally {
       setIsAuthenticated(false);
       setCurrentUser(null);
+      removeTokens();
       toast({
         title: "Logged out",
         description: "You have been successfully logged out",

@@ -1,59 +1,59 @@
 // Spring Boot Backend API Configuration
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://patientcare-4phl.onrender.com';
+export const API_BASE_URL = 'https://patientcare-4phl.onrender.com';
 
-// API endpoints
+// API endpoints - CORRECTED with /api prefix
 export const API_ENDPOINTS = {
   // Authentication
   AUTH: {
-    LOGIN: '/auth/login',
-    SIGNUP: '/auth/signup',
-    LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
-    VERIFY: '/auth/verify',
+    LOGIN: '/api/auth/signin',
+    SIGNUP: '/api/auth/signup',
+    LOGOUT: '/api/auth/signout',
+    REFRESH: '/api/auth/refreshtoken',
+    VERIFY: '/api/auth/verify',
   },
   // Patients
   PATIENTS: {
-    BASE: '/patients',
-    BY_ID: (id: string) => `/patients/${id}`,
-    SEARCH: '/patients/search',
-    CONSENT: (id: string) => `/patients/${id}/consent`,
-    EXPORT_EXCEL: '/patients/export/excel',
-    EXPORT_PDF: '/patients/export/pdf',
+    BASE: '/api/patients',
+    BY_ID: (id: string) => `/api/patients/${id}`,
+    SEARCH: '/api/patients/search',
+    CONSENT: (id: string) => `/api/patients/${id}/consent`,
+    EXPORT_EXCEL: '/api/patients/export/excel',
+    EXPORT_PDF: '/api/patients/export/pdf',
   },
   // Procedures
   PROCEDURES: {
-    BASE: '/procedures',
-    BY_ID: (id: string) => `/procedures/${id}`,
-    BY_PATIENT: (patientId: string) => `/procedures/patient/${patientId}`,
+    BASE: '/api/procedures',
+    BY_ID: (id: string) => `/api/procedures/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/procedures/patient/${patientId}`,
   },
   // Vital Data
   VITAL_DATA: {
-    BASE: '/vital-data',
-    BY_ID: (id: string) => `/vital-data/${id}`,
-    BY_PATIENT: (patientId: string) => `/vital-data/patient/${patientId}`,
+    BASE: '/api/vital-data',
+    BY_ID: (id: string) => `/api/vital-data/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/vital-data/patient/${patientId}`,
   },
   // Appointments
   APPOINTMENTS: {
-    BASE: '/appointments',
-    BY_ID: (id: string) => `/appointments/${id}`,
-    BY_PATIENT: (patientId: string) => `/appointments/patient/${patientId}`,
+    BASE: '/api/appointments',
+    BY_ID: (id: string) => `/api/appointments/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/appointments/patient/${patientId}`,
   },
   // Doctor Analysis
   ANALYSIS: {
-    BASE: '/analysis',
-    BY_ID: (id: string) => `/analysis/${id}`,
-    BY_PATIENT: (patientId: string) => `/analysis/patient/${patientId}`,
+    BASE: '/api/analysis',
+    BY_ID: (id: string) => `/api/analysis/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/analysis/patient/${patientId}`,
   },
   // Prescriptions
   PRESCRIPTIONS: {
-    BASE: '/prescriptions',
-    BY_ID: (id: string) => `/prescriptions/${id}`,
-    BY_PATIENT: (patientId: string) => `/prescriptions/patient/${patientId}`,
+    BASE: '/api/prescriptions',
+    BY_ID: (id: string) => `/api/prescriptions/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/prescriptions/patient/${patientId}`,
   },
   // Users
   USERS: {
-    PROFILE: '/users/profile',
-    UPDATE_PROFILE: '/users/profile',
+    PROFILE: '/api/users/profile',
+    UPDATE_PROFILE: '/api/users/profile',
   },
 };
 
@@ -101,6 +101,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Request interceptor to add token
@@ -139,7 +140,7 @@ apiClient.interceptors.response.use(
           { refreshToken }
         );
 
-        const { token } = response.data;
+        const { token } = response.data.data;
         setToken(token);
 
         originalRequest.headers.Authorization = `Bearer ${token}`;
