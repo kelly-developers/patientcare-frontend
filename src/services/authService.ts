@@ -38,42 +38,80 @@ export interface ApiResponse<T = any> {
 
 class AuthService {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
-      API_ENDPOINTS.AUTH.LOGIN,
-      credentials
-    );
-    const authData = response.data.data;
-    
-    // Store tokens and user data
-    setToken(authData.token);
-    if (authData.refreshToken) {
-      setRefreshToken(authData.refreshToken);
+    try {
+      const response = await apiClient.post<ApiResponse<AuthResponse>>(
+        API_ENDPOINTS.AUTH.LOGIN,
+        credentials
+      );
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Login failed');
+      }
+
+      const authData = response.data.data;
+      
+      // Store tokens and user data
+      setToken(authData.token);
+      if (authData.refreshToken) {
+        setRefreshToken(authData.refreshToken);
+      }
+      setUser(authData.user);
+      
+      return authData;
+    } catch (error: any) {
+      console.error('Login service error:', error);
+      
+      // Enhance error message for better user feedback
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else if (error.message) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Login failed. Please try again.');
+      }
     }
-    setUser(authData.user);
-    
-    return authData;
   }
 
   async signup(userData: SignupRequest): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
-      API_ENDPOINTS.AUTH.SIGNUP,
-      userData
-    );
-    const authData = response.data.data;
-    
-    // Store tokens and user data
-    setToken(authData.token);
-    if (authData.refreshToken) {
-      setRefreshToken(authData.refreshToken);
+    try {
+      const response = await apiClient.post<ApiResponse<AuthResponse>>(
+        API_ENDPOINTS.AUTH.SIGNUP,
+        userData
+      );
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Signup failed');
+      }
+
+      const authData = response.data.data;
+      
+      // Store tokens and user data
+      setToken(authData.token);
+      if (authData.refreshToken) {
+        setRefreshToken(authData.refreshToken);
+      }
+      setUser(authData.user);
+      
+      return authData;
+    } catch (error: any) {
+      console.error('Signup service error:', error);
+      
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else if (error.message) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Signup failed. Please try again.');
+      }
     }
-    setUser(authData.user);
-    
-    return authData;
   }
 
   async logout(): Promise<void> {
     try {
       await apiClient.post(API_ENDPOINTS.AUTH.LOGOUT);
+    } catch (error) {
+      console.error('Logout API error:', error);
+      // Continue with local logout even if API call fails
     } finally {
       // Always remove tokens even if API call fails
       const { removeTokens } = await import('@/config/api');
@@ -86,9 +124,12 @@ class AuthService {
       API_ENDPOINTS.AUTH.REFRESH,
       { refreshToken }
     );
-    const data = response.data.data;
     
-    // Update the token
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Token refresh failed');
+    }
+    
+    const data = response.data.data;
     setToken(data.token);
     
     return data;
@@ -98,6 +139,11 @@ class AuthService {
     const response = await apiClient.get<ApiResponse<{ valid: boolean }>>(
       API_ENDPOINTS.AUTH.VERIFY
     );
+    
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Token verification failed');
+    }
+    
     return response.data.data;
   }
 }

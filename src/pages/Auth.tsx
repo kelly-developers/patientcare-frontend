@@ -10,11 +10,23 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import authBackground from '@/assets/auth-background.jpg';
 
+interface SignupFormData {
+  username: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
 export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [activeTab, setActiveTab] = useState('signin');
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -28,6 +40,16 @@ export default function Auth() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!username || !password) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter both username and password",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -45,10 +67,10 @@ export default function Auth() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "System Error",
-        description: "Please contact system administrator",
+        description: error.message || "Please contact system administrator",
         variant: "destructive",
       });
     } finally {
@@ -58,45 +80,60 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    if (!username || !email || !password || !firstName || !lastName) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Registration Failed",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Registration Failed",
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (password !== confirmPassword) {
-        toast({
-          title: "Registration Failed",
-          description: "Passwords do not match",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (password.length < 6) {
-        toast({
-          title: "Registration Failed",
-          description: "Password must be at least 6 characters",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      const result = await signup({
+      const signupData = {
         username,
-        email: `${username}@cvms.local`,
+        email,
         password,
-        firstName: username,
-        lastName: 'User',
-        role: 'DOCTOR',
-      });
+        firstName,
+        lastName,
+        role: 'DOCTOR', // Default role
+      };
+
+      const result = await signup(signupData);
       if (result.success) {
         toast({
           title: "Account Created",
           description: "Your medical professional account has been created",
         });
+        // Reset form
         setUsername('');
+        setEmail('');
         setPassword('');
         setConfirmPassword('');
+        setFirstName('');
+        setLastName('');
         setActiveTab('signin');
       } else {
         toast({
@@ -105,10 +142,10 @@ export default function Auth() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "System Error",
-        description: "Please contact system administrator",
+        description: error.message || "Please contact system administrator",
         variant: "destructive",
       });
     } finally {
@@ -264,6 +301,7 @@ export default function Auth() {
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-3">
@@ -279,6 +317,7 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <Button
@@ -303,21 +342,75 @@ export default function Auth() {
 
                   <TabsContent value="signup" className="space-y-6 pt-6 animate-fade-in">
                     <form onSubmit={handleSignUp} className="space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <Label htmlFor="signup-firstName" className="text-white font-bold text-base flex items-center gap-2">
+                            <User className="w-5 h-5 text-green-300" />
+                            First Name
+                          </Label>
+                          <Input
+                            id="signup-firstName"
+                            type="text"
+                            placeholder="First name"
+                            className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all duration-300 h-12 text-base font-medium"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            required
+                            disabled={loading}
+                          />
+                        </div>
+                        <div className="space-y-3">
+                          <Label htmlFor="signup-lastName" className="text-white font-bold text-base flex items-center gap-2">
+                            <User className="w-5 h-5 text-green-300" />
+                            Last Name
+                          </Label>
+                          <Input
+                            id="signup-lastName"
+                            type="text"
+                            placeholder="Last name"
+                            className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all duration-300 h-12 text-base font-medium"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            required
+                            disabled={loading}
+                          />
+                        </div>
+                      </div>
+                      
                       <div className="space-y-3">
                         <Label htmlFor="signup-username" className="text-white font-bold text-base flex items-center gap-2">
                           <User className="w-5 h-5 text-green-300" />
-                          Create Medical ID
+                          Username
                         </Label>
                         <Input
                           id="signup-username"
                           type="text"
-                          placeholder="Choose your staff username"
+                          placeholder="Choose your username"
                           className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all duration-300 h-12 text-base font-medium"
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
+                      
+                      <div className="space-y-3">
+                        <Label htmlFor="signup-email" className="text-white font-bold text-base flex items-center gap-2">
+                          <User className="w-5 h-5 text-green-300" />
+                          Email
+                        </Label>
+                        <Input
+                          id="signup-email"
+                          type="email"
+                          placeholder="Enter your email"
+                          className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all duration-300 h-12 text-base font-medium"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                      
                       <div className="space-y-3">
                         <Label htmlFor="signup-password" className="text-white font-bold text-base flex items-center gap-2">
                           <Lock className="w-5 h-5 text-green-300" />
@@ -331,6 +424,7 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-3">
@@ -346,6 +440,7 @@ export default function Auth() {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <Button

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService, LoginRequest, SignupRequest } from '@/services/authService';
-import { getToken, getUser, setUser, removeTokens } from '@/config/api';
+import { getToken, getUser, setUser, removeTokens, setToken, setRefreshToken } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface User {
@@ -37,19 +37,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signup = async (data: SignupRequest) => {
+  const signup = async (data: SignupRequest): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await authService.signup(data);
       setIsAuthenticated(true);
       setCurrentUser(response.user);
       return { success: true };
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Signup failed';
+      console.error('Signup error:', error);
+      
+      // Handle different error formats
+      let errorMessage = 'Signup failed. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+      
       return { success: false, error: errorMessage };
     }
   };
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await authService.login({ username, password });
       setIsAuthenticated(true);
@@ -62,12 +74,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return { success: true };
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Invalid credentials';
+      console.error('Login error:', error);
+      
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+      
       return { success: false, error: errorMessage };
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
       await authService.logout();
     } catch (error) {
@@ -97,5 +120,3 @@ export function useAuth() {
   }
   return context;
 }
-
-//final

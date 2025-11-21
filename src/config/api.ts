@@ -1,9 +1,8 @@
-// Spring Boot Backend API Configuration
+// API Configuration
 export const API_BASE_URL = 'https://patientcare-4phl.onrender.com';
 
-// API endpoints - CORRECTED with /api prefix
+// API endpoints
 export const API_ENDPOINTS = {
-  // Authentication
   AUTH: {
     LOGIN: '/api/auth/signin',
     SIGNUP: '/api/auth/signup',
@@ -11,7 +10,6 @@ export const API_ENDPOINTS = {
     REFRESH: '/api/auth/refreshtoken',
     VERIFY: '/api/auth/verify',
   },
-  // Patients
   PATIENTS: {
     BASE: '/api/patients',
     BY_ID: (id: string) => `/api/patients/${id}`,
@@ -20,37 +18,31 @@ export const API_ENDPOINTS = {
     EXPORT_EXCEL: '/api/patients/export/excel',
     EXPORT_PDF: '/api/patients/export/pdf',
   },
-  // Procedures
   PROCEDURES: {
     BASE: '/api/procedures',
     BY_ID: (id: string) => `/api/procedures/${id}`,
     BY_PATIENT: (patientId: string) => `/api/procedures/patient/${patientId}`,
   },
-  // Vital Data
   VITAL_DATA: {
     BASE: '/api/vital-data',
     BY_ID: (id: string) => `/api/vital-data/${id}`,
     BY_PATIENT: (patientId: string) => `/api/vital-data/patient/${patientId}`,
   },
-  // Appointments
   APPOINTMENTS: {
     BASE: '/api/appointments',
     BY_ID: (id: string) => `/api/appointments/${id}`,
     BY_PATIENT: (patientId: string) => `/api/appointments/patient/${patientId}`,
   },
-  // Doctor Analysis
   ANALYSIS: {
     BASE: '/api/analysis',
     BY_ID: (id: string) => `/api/analysis/${id}`,
     BY_PATIENT: (patientId: string) => `/api/analysis/patient/${patientId}`,
   },
-  // Prescriptions
   PRESCRIPTIONS: {
     BASE: '/api/prescriptions',
     BY_ID: (id: string) => `/api/prescriptions/${id}`,
     BY_PATIENT: (patientId: string) => `/api/prescriptions/patient/${patientId}`,
   },
-  // Users
   USERS: {
     PROFILE: '/api/users/profile',
     UPDATE_PROFILE: '/api/users/profile',
@@ -58,39 +50,56 @@ export const API_ENDPOINTS = {
 };
 
 // Token management
-export const TOKEN_KEY = 'cvms_token';
-export const REFRESH_TOKEN_KEY = 'cvms_refresh_token';
-export const USER_KEY = 'cvms_user';
+export const TOKEN_KEY = 'patientcare_token';
+export const REFRESH_TOKEN_KEY = 'patientcare_refresh_token';
+export const USER_KEY = 'patientcare_user';
 
 export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY);
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+  return null;
 };
 
 export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_KEY, token);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(TOKEN_KEY, token);
+  }
 };
 
 export const getRefreshToken = (): string | null => {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  }
+  return null;
 };
 
 export const setRefreshToken = (token: string): void => {
-  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  }
 };
 
 export const removeTokens = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
 };
 
 export const getUser = (): any => {
-  const user = localStorage.getItem(USER_KEY);
-  return user ? JSON.parse(user) : null;
+  if (typeof window !== 'undefined') {
+    const user = localStorage.getItem(USER_KEY);
+    return user ? JSON.parse(user) : null;
+  }
+  return null;
 };
 
 export const setUser = (user: any): void => {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  }
 };
 
 // Axios instance configuration
@@ -101,7 +110,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true,
+  timeout: 30000, // 30 seconds timeout
 });
 
 // Request interceptor to add token
@@ -118,13 +127,22 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle token refresh
+// Response interceptor to handle errors
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network error:', error);
+      return Promise.reject(new Error('Network error. Please check your connection.'));
+    }
+
+    // Handle 401 errors (token expired)
+    if (error.response.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
@@ -143,6 +161,7 @@ apiClient.interceptors.response.use(
         const { token } = response.data.data;
         setToken(token);
 
+        // Retry the original request with new token
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
@@ -152,6 +171,7 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Handle other errors
     return Promise.reject(error);
   }
 );
