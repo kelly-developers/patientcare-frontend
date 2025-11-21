@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'https://patientcare-4phl.onrender.com';
+export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 
 // API endpoints
 export const API_ENDPOINTS = {
