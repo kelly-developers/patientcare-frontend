@@ -83,24 +83,23 @@ export default function PatientOnboarding() {
 
       // Transform data to match backend structure
       const completePatientData = {
-        ...patientData,
         // Map to backend field names
         firstName: patientData.first_name,
         lastName: patientData.last_name,
         dateOfBirth: patientData.date_of_birth,
         gender: patientData.gender,
-        phone: patientData.phone,
-        email: patientData.email,
-        address: patientData.address,
-        emergencyContactName: patientData.emergency_contact_name,
-        emergencyContactPhone: patientData.emergency_contact_phone,
-        medicalHistory: patientData.medical_history,
-        allergies: patientData.allergies,
-        currentMedications: patientData.current_medications,
+        phone: patientData.phone || '',
+        email: patientData.email || '',
+        address: patientData.address || '',
+        emergencyContactName: patientData.emergency_contact_name || '',
+        emergencyContactPhone: patientData.emergency_contact_phone || '',
+        medicalHistory: patientData.medical_history || '',
+        allergies: patientData.allergies || '',
+        currentMedications: patientData.current_medications || '',
         
         // Consent data mapped to backend structure
         researchConsent: researchConsent.dataUse,
-        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : null,
+        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()) : null,
         futureContactConsent: researchConsent.futureContact,
         anonymizedDataConsent: researchConsent.anonymizedData,
         sampleStorageConsent: sampleStorage.storeSamples,
@@ -175,18 +174,23 @@ export default function PatientOnboarding() {
 
   // Safe helper functions to access patient data
   const hasResearchConsent = (patient: any) => {
+    // Check both new and old field structures
     return patient?.researchConsent === true || 
-           patient?.research_consent?.dataUse === true;
+           patient?.research_consent?.dataUse === true ||
+           patient?.research_consent === true;
   };
 
   const hasSampleStorage = (patient: any) => {
+    // Check both new and old field structures
     return patient?.sampleStorageConsent === true || 
-           patient?.sample_storage?.storeSamples === true;
+           patient?.sample_storage?.storeSamples === true ||
+           patient?.sample_storage_consent === true;
   };
 
   // Safe date formatting
-  const formatPatientDate = (dateString: string) => {
+  const formatPatientDate = (dateString: any) => {
     try {
+      if (!dateString) return 'N/A';
       return new Date(dateString).toLocaleDateString();
     } catch (error) {
       return 'Invalid Date';
@@ -203,6 +207,11 @@ export default function PatientOnboarding() {
     const firstName = patient?.firstName || patient?.first_name || '';
     const lastName = patient?.lastName || patient?.last_name || '';
     return `${firstName} ${lastName}`.trim() || 'Unknown Patient';
+  };
+
+  // Safe access to creation date
+  const getCreatedAt = (patient: any) => {
+    return patient?.createdAt || patient?.created_at || new Date().toISOString();
   };
 
   return (
@@ -510,8 +519,8 @@ export default function PatientOnboarding() {
               
               {searchQuery && patients.length > 0 && (
                 <div className="space-y-4">
-                  {patients.map((patient) => (
-                    <div key={patient.id} className="flex items-center justify-between p-4 bg-background rounded-lg border">
+                  {patients.map((patient, index) => (
+                    <div key={patient.id || `patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                       <div className="space-y-1">
                         <div className="font-medium text-foreground">
                           {getPatientName(patient)}
@@ -574,8 +583,8 @@ export default function PatientOnboarding() {
                   No patients registered yet
                 </div>
               ) : (
-                patients.slice(0, 5).map((patient) => (
-                  <div key={patient.id} className="flex items-center justify-between p-4 bg-background rounded-lg border">
+                patients.slice(0, 5).map((patient, index) => (
+                  <div key={patient.id || `recent-patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                     <div className="space-y-1">
                       <div className="font-medium text-foreground">
                         {getPatientName(patient)}
@@ -584,7 +593,7 @@ export default function PatientOnboarding() {
                         ID: {getPatientId(patient)} • DOB: {formatPatientDate(patient.dateOfBirth || patient.date_of_birth)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Registered: {formatPatientDate(patient.createdAt || patient.created_at)}
+                        Registered: {formatPatientDate(getCreatedAt(patient))}
                       </div>
                       <div className="flex gap-2 mt-1">
                         {hasResearchConsent(patient) && (
