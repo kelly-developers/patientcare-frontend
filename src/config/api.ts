@@ -5,7 +5,7 @@ export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/api/auth/login',
-    SIGNUP: '/api/auth/signup',
+    SIGNUP: '/auth/signup',
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
     VERIFY: '/api/auth/verify',
