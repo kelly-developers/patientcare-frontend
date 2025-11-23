@@ -5,7 +5,7 @@ export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/api/auth/login',
-    SIGNUP: '/auth/signup',
+    SIGNUP: '/api/auth/signup',
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
     VERIFY: '/api/auth/verify',
@@ -140,13 +140,16 @@ export const setUser = (user: any): void => {
 // Axios instances
 import axios from 'axios';
 
+// Common headers
+const commonHeaders = {
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+};
+
 // Auth client (no token required)
 export const authClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
+  headers: commonHeaders,
   timeout: 30000,
   withCredentials: false,
 });
@@ -154,10 +157,7 @@ export const authClient = axios.create({
 // API client (with token)
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
+  headers: commonHeaders,
   timeout: 30000,
   withCredentials: false,
 });
@@ -199,7 +199,7 @@ apiClient.interceptors.response.use(
     });
     
     // Handle CORS errors
-    if (error.code === 'ERR_NETWORK' || error.message.includes('blocked by DevTools')) {
+    if (error.code === 'ERR_NETWORK' || error.message.includes('CORS') || error.message.includes('blocked')) {
       console.error('🌐 CORS Error Detected: Request was blocked by browser CORS policy');
       error.isCorsError = true;
     }
@@ -249,7 +249,7 @@ authClient.interceptors.response.use(
       response: error.response?.data
     });
     
-    if (error.code === 'ERR_NETWORK' || error.message.includes('blocked by DevTools')) {
+    if (error.code === 'ERR_NETWORK' || error.message.includes('CORS') || error.message.includes('blocked')) {
       console.error('🌐 CORS Error Detected: Request was blocked by browser CORS policy');
       error.isCorsError = true;
     }
@@ -258,7 +258,7 @@ authClient.interceptors.response.use(
   }
 );
 
-// Enhanced backend connection test with retry logic
+// Enhanced backend connection test with multiple strategies
 export const testBackendConnection = async (retries = 3, delay = 2000) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -269,6 +269,7 @@ export const testBackendConnection = async (retries = 3, delay = 2000) => {
         timeout: 15000,
         headers: {
           'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         },
       });
       
@@ -321,8 +322,10 @@ export const testBackendWithFetch = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       mode: 'cors',
+      credentials: 'omit',
     });
     
     if (response.ok) {
@@ -330,11 +333,48 @@ export const testBackendWithFetch = async () => {
       console.log('✅ Fetch test successful:', data);
       return { success: true, data };
     } else {
-      console.error('❌ Fetch test failed:', response.status);
-      return { success: false, status: response.status };
+      console.error('❌ Fetch test failed:', response.status, response.statusText);
+      return { success: false, status: response.status, statusText: response.statusText };
     }
   } catch (error: any) {
     console.error('❌ Fetch test error:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Test with different endpoints
+export const testMultipleEndpoints = async () => {
+  const endpoints = [
+    API_ENDPOINTS.HEALTH,
+    '/api/health/detailed',
+    '/health',
+    '/'
+  ];
+  
+  const results = [];
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`🔍 Testing endpoint: ${endpoint}`);
+      const response = await authClient.get(endpoint, { timeout: 10000 });
+      results.push({
+        endpoint,
+        success: true,
+        status: response.status,
+        data: response.data
+      });
+      console.log(`✅ ${endpoint}: SUCCESS`);
+    } catch (error: any) {
+      results.push({
+        endpoint,
+        success: false,
+        error: error.message,
+        status: error.response?.status,
+        isCorsError: error.isCorsError
+      });
+      console.log(`❌ ${endpoint}: FAILED - ${error.message}`);
+    }
+  }
+  
+  return results;
 };
