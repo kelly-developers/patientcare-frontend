@@ -69,7 +69,7 @@ export default function PatientOnboarding() {
   };
 
   // Fixed onSubmit handler - properly handles form submission
-  const handleSubmitWithConsent = (patientData: any) => {
+  const handleSubmitWithConsent = async (patientData: any) => {
     try {
       // Validate required patient data
       if (!patientData.first_name || !patientData.last_name || !patientData.date_of_birth) {
@@ -81,24 +81,42 @@ export default function PatientOnboarding() {
         return;
       }
 
+      // Transform data to match backend structure
       const completePatientData = {
         ...patientData,
-        research_consent: {
-          ...researchConsent,
-          // Ensure consent date is set if dataUse is true
-          consentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()) : null
-        },
-        sample_storage: {
-          ...sampleStorage,
-          // Reset sample types if storeSamples is false
-          sampleTypes: sampleStorage.storeSamples ? sampleStorage.sampleTypes : []
-        },
-        consent_timestamp: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        // Map to backend field names
+        firstName: patientData.first_name,
+        lastName: patientData.last_name,
+        dateOfBirth: patientData.date_of_birth,
+        gender: patientData.gender,
+        phone: patientData.phone,
+        email: patientData.email,
+        address: patientData.address,
+        emergencyContactName: patientData.emergency_contact_name,
+        emergencyContactPhone: patientData.emergency_contact_phone,
+        medicalHistory: patientData.medical_history,
+        allergies: patientData.allergies,
+        currentMedications: patientData.current_medications,
+        
+        // Consent data mapped to backend structure
+        researchConsent: researchConsent.dataUse,
+        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : null,
+        futureContactConsent: researchConsent.futureContact,
+        anonymizedDataConsent: researchConsent.anonymizedData,
+        sampleStorageConsent: sampleStorage.storeSamples,
+        sampleTypes: sampleStorage.sampleTypes.join(','),
+        storageDuration: sampleStorage.storageDuration,
+        futureResearchUseConsent: sampleStorage.futureResearchUse,
+        destructionConsent: sampleStorage.destructionConsent,
+        
+        // Store additional consent data as JSON
+        consentData: {
+          specificStudies: researchConsent.specificStudies,
+          consentTimestamp: new Date().toISOString()
+        }
       };
       
-      addPatient(completePatientData);
+      await addPatient(completePatientData);
       
       // Reset consent forms
       setResearchConsent({
@@ -155,13 +173,36 @@ export default function PatientOnboarding() {
     { value: "studyend", label: "Until Study Completion" }
   ];
 
-  // Helper function to safely access consent data
+  // Safe helper functions to access patient data
   const hasResearchConsent = (patient: any) => {
-    return patient?.research_consent?.dataUse === true;
+    return patient?.researchConsent === true || 
+           patient?.research_consent?.dataUse === true;
   };
 
   const hasSampleStorage = (patient: any) => {
-    return patient?.sample_storage?.storeSamples === true;
+    return patient?.sampleStorageConsent === true || 
+           patient?.sample_storage?.storeSamples === true;
+  };
+
+  // Safe date formatting
+  const formatPatientDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
+
+  // Safe access to patient ID
+  const getPatientId = (patient: any) => {
+    return patient?.patientId || patient?.patient_id || 'N/A';
+  };
+
+  // Safe access to patient name
+  const getPatientName = (patient: any) => {
+    const firstName = patient?.firstName || patient?.first_name || '';
+    const lastName = patient?.lastName || patient?.last_name || '';
+    return `${firstName} ${lastName}`.trim() || 'Unknown Patient';
   };
 
   return (
@@ -192,7 +233,6 @@ export default function PatientOnboarding() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Fixed: Pass the correct onSubmit handler */}
               <PatientForm onSubmit={handlePatientFormSubmit} />
             </CardContent>
           </Card>
@@ -474,17 +514,16 @@ export default function PatientOnboarding() {
                     <div key={patient.id} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                       <div className="space-y-1">
                         <div className="font-medium text-foreground">
-                          {patient.first_name} {patient.last_name}
+                          {getPatientName(patient)}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          ID: {patient.patient_id} • DOB: {new Date(patient.date_of_birth).toLocaleDateString()}
+                          ID: {getPatientId(patient)} • DOB: {formatPatientDate(patient.dateOfBirth || patient.date_of_birth)}
                         </div>
                         {patient.email && (
                           <div className="text-xs text-muted-foreground">
                             Email: {patient.email}
                           </div>
                         )}
-                        {/* Fixed: Safe access to consent data */}
                         <div className="flex gap-2 mt-1">
                           {hasResearchConsent(patient) && (
                             <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
@@ -539,15 +578,14 @@ export default function PatientOnboarding() {
                   <div key={patient.id} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                     <div className="space-y-1">
                       <div className="font-medium text-foreground">
-                        {patient.first_name} {patient.last_name}
+                        {getPatientName(patient)}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        ID: {patient.patient_id} • DOB: {new Date(patient.date_of_birth).toLocaleDateString()}
+                        ID: {getPatientId(patient)} • DOB: {formatPatientDate(patient.dateOfBirth || patient.date_of_birth)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Registered: {new Date(patient.created_at).toLocaleDateString()}
+                        Registered: {formatPatientDate(patient.createdAt || patient.created_at)}
                       </div>
-                      {/* Fixed: Safe access to consent data */}
                       <div className="flex gap-2 mt-1">
                         {hasResearchConsent(patient) && (
                           <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
