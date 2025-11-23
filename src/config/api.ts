@@ -11,10 +11,21 @@ export const API_ENDPOINTS = {
     VERIFY: '/api/auth/verify',
     HEALTH: '/api/auth/health',
   },
-  HEALTH: '/api/health',
-  PATIENTS: '/api/patients',
-  PROCEDURES: '/api/procedures',
-  USERS: '/api/users'
+  PATIENTS: {
+    BASE: '/api/patients',
+    SEARCH: '/api/patients/search',
+    CONSENT: '/api/patients/consented',
+    EXPORT: '/api/patients/export',
+  },
+  PROCEDURES: {
+    BASE: '/api/procedures',
+    PATIENT: '/api/procedures/patient',
+    STATUS: '/api/procedures/status',
+  },
+  USERS: {
+    PROFILE: '/api/users/profile',
+  },
+  HEALTH: '/api/health'
 };
 
 // Token management
@@ -104,10 +115,10 @@ export const setUser = (user: any): void => {
   }
 };
 
-// Axios instance for auth requests
+// Axios instances
 import axios from 'axios';
 
-// Create axios instance with CORS-friendly configuration
+// Auth client (no token required)
 export const authClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -118,8 +129,19 @@ export const authClient = axios.create({
   withCredentials: false,
 });
 
-// Request interceptor to add auth token
-authClient.interceptors.request.use(
+// API client (with token)
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+  timeout: 30000,
+  withCredentials: false,
+});
+
+// Request interceptor for apiClient to add auth token
+apiClient.interceptors.request.use(
   (config) => {
     const token = getToken();
     if (token) {
@@ -137,7 +159,58 @@ authClient.interceptors.request.use(
   }
 );
 
-// Response interceptor
+// Response interceptor for apiClient
+apiClient.interceptors.response.use(
+  (response) => {
+    console.log(`✅ Response from ${response.config.url}:`, {
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
+  (error) => {
+    console.error(`❌ Error from ${error.config?.url}:`, {
+      status: error.response?.status,
+      message: error.message,
+      code: error.code,
+      response: error.response?.data
+    });
+    
+    // Handle CORS errors
+    if (error.code === 'ERR_NETWORK' || error.message.includes('blocked by DevTools')) {
+      console.error('🌐 CORS Error Detected: Request was blocked by browser CORS policy');
+      error.isCorsError = true;
+    }
+    
+    // Handle token expiration
+    if (error.response?.status === 401) {
+      console.warn('🔐 Token expired or invalid');
+      removeTokens();
+      // Redirect to login page if needed
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth';
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+// Request interceptor for authClient
+authClient.interceptors.request.use(
+  (config) => {
+    console.log(`🚀 ${config.method?.toUpperCase()} request to: ${config.url}`, {
+      data: config.data ? { ...config.data, password: config.data.password ? '***' : undefined } : undefined
+    });
+    return config;
+  },
+  (error) => {
+    console.error('❌ Request error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for authClient
 authClient.interceptors.response.use(
   (response) => {
     console.log(`✅ Response from ${response.config.url}:`, {
@@ -154,17 +227,9 @@ authClient.interceptors.response.use(
       response: error.response?.data
     });
     
-    // Handle CORS errors specifically
     if (error.code === 'ERR_NETWORK' || error.message.includes('blocked by DevTools')) {
       console.error('🌐 CORS Error Detected: Request was blocked by browser CORS policy');
       error.isCorsError = true;
-    }
-    
-    // Handle token expiration
-    if (error.response?.status === 401) {
-      console.warn('🔐 Token expired or invalid');
-      removeTokens();
-      // You might want to redirect to login page here
     }
     
     return Promise.reject(error);
@@ -176,7 +241,6 @@ export const testBackendConnection = async () => {
   try {
     console.log('🔍 Testing backend connection...');
     
-    // Test with health endpoint
     const response = await authClient.get(API_ENDPOINTS.HEALTH, {
       timeout: 10000,
     });
