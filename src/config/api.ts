@@ -9,7 +9,7 @@ export const API_ENDPOINTS = {
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
     VERIFY: '/api/auth/verify',
-    HEALTH: '/api/auth/health',
+    // HEALTH: '/api/auth/health',
   },
   PATIENTS: {
     BASE: '/api/patients',
