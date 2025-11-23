@@ -11,9 +11,13 @@ export const API_ENDPOINTS = {
     VERIFY: '/api/auth/verify',
     HEALTH: '/api/auth/health',
   },
+  HEALTH: '/api/health',
+  PATIENTS: '/api/patients',
+  PROCEDURES: '/api/procedures',
+  USERS: '/api/users'
 };
 
-// Token management (keep your existing functions)
+// Token management
 export const TOKEN_KEY = 'patientcare_token';
 export const REFRESH_TOKEN_KEY = 'patientcare_refresh_token';
 export const USER_KEY = 'patientcare_user';
@@ -111,12 +115,17 @@ export const authClient = axios.create({
     'Accept': 'application/json',
   },
   timeout: 30000,
-  withCredentials: false, // Keep this as false
+  withCredentials: false,
 });
 
-// Request interceptor
+// Request interceptor to add auth token
 authClient.interceptors.request.use(
   (config) => {
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
     console.log(`🚀 ${config.method?.toUpperCase()} request to: ${config.url}`, {
       data: config.data ? { ...config.data, password: config.data.password ? '***' : undefined } : undefined
     });
@@ -151,6 +160,13 @@ authClient.interceptors.response.use(
       error.isCorsError = true;
     }
     
+    // Handle token expiration
+    if (error.response?.status === 401) {
+      console.warn('🔐 Token expired or invalid');
+      removeTokens();
+      // You might want to redirect to login page here
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -160,8 +176,8 @@ export const testBackendConnection = async () => {
   try {
     console.log('🔍 Testing backend connection...');
     
-    // Test with different methods
-    const response = await authClient.get('/api/auth/health', {
+    // Test with health endpoint
+    const response = await authClient.get(API_ENDPOINTS.HEALTH, {
       timeout: 10000,
     });
     
@@ -193,7 +209,7 @@ export const testBackendConnection = async () => {
 export const testBackendWithFetch = async () => {
   try {
     console.log('🔍 Testing backend with fetch API...');
-    const response = await fetch(`${API_BASE_URL}/api/auth/health`, {
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
