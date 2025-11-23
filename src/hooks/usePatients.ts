@@ -1,121 +1,194 @@
 import { useState, useEffect } from 'react';
+import { apiClient, API_ENDPOINTS, refreshAuthToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { patientsService, Patient, CreatePatientRequest } from '@/services/patientsService';
 
-export type { Patient };
-
-export function usePatients() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+export const usePatients = () => {
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const { toast } = useToast();
 
-  const fetchPatients = async () => {
+  // Load patients on component mount
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+  const loadPatients = async () => {
     try {
       setLoading(true);
-      const data = await patientsService.getAll();
-      setPatients(data);
+      setError(null);
+      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.BASE);
+      setPatients(response.data);
     } catch (error) {
-      console.error('Error fetching patients:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch patients",
-        variant: "destructive",
-      });
+      console.error('Error loading patients:', error);
+      setError(error.message);
+      
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive"
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const addPatient = async (patientData: CreatePatientRequest) => {
+  const addPatient = async (patientData) => {
     try {
-      const newPatient = await patientsService.create(patientData);
-      setPatients(prev => [newPatient, ...prev]);
+      setLoading(true);
+      setError(null);
+      
+      console.log('📝 Creating patient:', patientData);
+      
+      const response = await apiClient.post(API_ENDPOINTS.PATIENTS.BASE, patientData);
+      
+      setPatients(prev => [response.data, ...prev]);
       
       toast({
-        title: "Success",
-        description: "Patient added successfully",
+        title: "Patient created successfully",
+        description: "Patient has been added to the system",
       });
-      return newPatient;
+      
+      return response.data;
     } catch (error) {
-      console.error('Error adding patient:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add patient",
-        variant: "destructive",
-      });
+      console.error('Error creating patient:', error);
+      setError(error.message);
+      
+      // Handle token expiration specifically
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again to continue",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Failed to create patient",
+          description: error.response?.data?.message || "Please try again",
+          variant: "destructive"
+        });
+      }
+      
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updatePatient = async (id: string, patientData: Partial<Patient>) => {
+  const searchPatients = async (query) => {
     try {
-      const updatedPatient = await patientsService.update(id, patientData);
-      setPatients(prev => prev.map(p => p.id === id ? updatedPatient : p));
+      setLoading(true);
+      setError(null);
+      
+      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.SEARCH, {
+        params: { q: query }
+      });
+      
+      setPatients(response.data);
+    } catch (error) {
+      console.error('Error searching patients:', error);
+      setError(error.message);
+      
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePatient = async (id, patientData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await apiClient.put(API_ENDPOINTS.PATIENTS.BY_ID(id), patientData);
+      
+      setPatients(prev => prev.map(patient => 
+        patient.id === id ? response.data : patient
+      ));
       
       toast({
-        title: "Success",
-        description: "Patient updated successfully",
+        title: "Patient updated successfully",
+        description: "Patient information has been updated",
       });
-      return updatedPatient;
+      
+      return response.data;
     } catch (error) {
       console.error('Error updating patient:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update patient",
-        variant: "destructive",
-      });
+      setError(error.message);
+      
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Failed to update patient",
+          description: error.response?.data?.message || "Please try again",
+          variant: "destructive"
+        });
+      }
+      
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const deletePatient = async (id: string) => {
+  const deletePatient = async (id) => {
     try {
-      await patientsService.delete(id);
-      setPatients(prev => prev.filter(p => p.id !== id));
+      setLoading(true);
+      setError(null);
+      
+      await apiClient.delete(API_ENDPOINTS.PATIENTS.BY_ID(id));
+      
+      setPatients(prev => prev.filter(patient => patient.id !== id));
       
       toast({
-        title: "Success",
-        description: "Patient deleted successfully",
+        title: "Patient deleted successfully",
+        description: "Patient has been removed from the system",
       });
     } catch (error) {
       console.error('Error deleting patient:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete patient",
-        variant: "destructive",
-      });
+      setError(error.message);
+      
+      if (error.response?.status === 401) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Failed to delete patient",
+          description: error.response?.data?.message || "Please try again",
+          variant: "destructive"
+        });
+      }
+      
       throw error;
-    }
-  };
-
-  const searchPatients = async (query: string) => {
-    try {
-      setLoading(true);
-      const data = await patientsService.search(query);
-      setPatients(data);
-    } catch (error) {
-      console.error('Error searching patients:', error);
-      toast({
-        title: "Error",
-        description: "Failed to search patients",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchPatients();
-  }, []);
 
   return {
     patients,
     loading,
+    error,
     addPatient,
+    searchPatients,
     updatePatient,
     deletePatient,
-    searchPatients,
-    refreshPatients: fetchPatients,
+    refreshPatients: loadPatients
   };
-}
+};
