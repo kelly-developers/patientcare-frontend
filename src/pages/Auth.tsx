@@ -257,30 +257,40 @@ export default function Auth() {
             <HospitalStats />
 
             {/* Backend Status Indicator */}
-            <div className={`flex items-center gap-3 p-4 rounded-xl border-2 shadow-lg ${
+            <div className={`flex items-center gap-3 p-4 rounded-xl border-2 shadow-lg transition-all duration-300 ${
               backendStatus === 'connected' 
                 ? 'bg-green-600/90 border-green-400' 
                 : backendStatus === 'error'
                 ? 'bg-red-600/90 border-red-400'
-                : 'bg-yellow-600/90 border-yellow-400'
+                : 'bg-yellow-600/90 border-yellow-400 animate-pulse'
             }`}>
               {backendStatus === 'connected' ? (
                 <Wifi className="w-6 h-6 text-green-300" />
+              ) : backendStatus === 'checking' ? (
+                <Loader2 className="w-6 h-6 text-yellow-300 animate-spin" />
               ) : (
                 <WifiOff className="w-6 h-6 text-red-300" />
               )}
-              <div>
+              <div className="flex-1">
                 <div className="font-bold text-white text-lg">
-                  {backendStatus === 'connected' ? 'Server Connected' : 
-                   backendStatus === 'error' ? 'Server Offline' : 'Checking Connection'}
+                  {backendStatus === 'connected' ? '✓ Server Connected' : 
+                   backendStatus === 'error' ? '✗ Server Offline' : 'Connecting...'}
                 </div>
                 <div className={`text-sm font-medium ${
-                  backendStatus === 'connected' ? 'text-green-100' : 'text-red-100'
+                  backendStatus === 'connected' ? 'text-green-100' : 
+                  backendStatus === 'checking' ? 'text-yellow-100' : 'text-red-100'
                 }`}>
                   {backendStatus === 'connected' 
                     ? 'Backend service is ready' 
-                    : 'Cannot connect to backend service'}
+                    : backendStatus === 'checking'
+                    ? 'Testing connection to backend...'
+                    : 'Cannot connect. Server may be starting up.'}
                 </div>
+                {backendStatus === 'error' && (
+                  <div className="text-xs text-red-200 mt-1">
+                    URL: https://patientcarebackend.onrender.com
+                  </div>
+                )}
               </div>
             </div>
           </div>

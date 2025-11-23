@@ -258,37 +258,59 @@ authClient.interceptors.response.use(
   }
 );
 
-// Enhanced backend connection test
-export const testBackendConnection = async () => {
-  try {
-    console.log('🔍 Testing backend connection...');
-    
-    const response = await authClient.get(API_ENDPOINTS.HEALTH, {
-      timeout: 10000,
-    });
-    
-    console.log('✅ Backend connection successful:', response.data);
-    return { 
-      success: true, 
-      data: response.data,
-      status: response.status 
-    };
-  } catch (error: any) {
-    console.error('❌ Backend connection failed:', {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      isCorsError: error.isCorsError
-    });
-    
-    return { 
-      success: false, 
-      error: error.message,
-      code: error.code,
-      status: error.response?.status,
-      isCorsError: error.isCorsError || false
-    };
+// Enhanced backend connection test with retry logic
+export const testBackendConnection = async (retries = 3, delay = 2000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔍 Testing backend connection (Attempt ${attempt}/${retries})...`);
+      console.log(`🌐 Backend URL: ${API_BASE_URL}`);
+      
+      const response = await authClient.get(API_ENDPOINTS.HEALTH, {
+        timeout: 15000,
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      
+      console.log('✅ Backend connection successful:', response.data);
+      return { 
+        success: true, 
+        data: response.data,
+        status: response.status,
+        attempt 
+      };
+    } catch (error: any) {
+      console.error(`❌ Backend connection failed (Attempt ${attempt}/${retries}):`, {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        url: error.config?.url,
+        isCorsError: error.isCorsError
+      });
+      
+      // If not the last attempt, wait before retrying
+      if (attempt < retries) {
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // Final attempt failed
+        return { 
+          success: false, 
+          error: error.message,
+          code: error.code,
+          status: error.response?.status,
+          isCorsError: error.isCorsError || false,
+          attempts: retries
+        };
+      }
+    }
   }
+  
+  return { 
+    success: false, 
+    error: 'Max retry attempts reached',
+    attempts: retries
+  };
 };
 
 // Direct fetch test (bypass axios)

@@ -48,9 +48,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setCurrentUser(null);
         }
 
-        // Test backend connection
-        const connection = await import('@/config/api').then(module => module.testBackendConnection());
-        setBackendStatus(connection.success ? 'connected' : 'error');
+        // Test backend connection with retries
+        console.log('🔍 Starting backend health check...');
+        setBackendStatus('checking');
+        
+        const connection = await import('@/config/api').then(module => module.testBackendConnection(3, 2000));
+        
+        if (connection.success) {
+          console.log('✅ Backend is online and responding');
+          setBackendStatus('connected');
+        } else {
+          console.error('❌ Backend connection failed after all retries:', connection);
+          setBackendStatus('error');
+          
+          // Show a warning toast about backend connection
+          toast({
+            title: "Backend Connection Issue",
+            description: "The server might be starting up. Please wait a moment and try again.",
+            variant: "destructive",
+          });
+        }
         
       } catch (error) {
         console.error('❌ Error initializing auth:', error);
@@ -64,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initializeAuth();
-  }, []);
+  }, [toast]);
 
   const signup = async (data: SignupRequest): Promise<{ success: boolean; error?: string }> => {
     try {
