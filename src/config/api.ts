@@ -4,11 +4,16 @@ export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 // API endpoints
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: '/api/auth/login',
-    SIGNUP: '/api/auth/signup',
-    LOGOUT: '/api/auth/logout',
-    REFRESH: '/api/auth/refresh',
-    VERIFY: '/api/auth/verify',
+    LOGIN: '/auth/login',
+    SIGNUP: '/auth/signup',
+    LOGOUT: '/auth/logout',
+    REFRESH: '/auth/refresh',
+    VERIFY: '/auth/verify',
+  },
+  HEALTH: {
+    BASE: '/health',
+    DETAILED: '/health/detailed',
+    PING: '/health/ping'
   },
   PATIENTS: {
     BASE: '/api/patients',
@@ -47,7 +52,6 @@ export const API_ENDPOINTS = {
   USERS: {
     PROFILE: '/api/users/profile',
   },
-  HEALTH: '/api/health'
 };
 
 // Token management
@@ -260,95 +264,106 @@ authClient.interceptors.response.use(
 
 // Enhanced backend connection test with multiple strategies
 export const testBackendConnection = async (retries = 3, delay = 2000) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`🔍 Testing backend connection (Attempt ${attempt}/${retries})...`);
-      console.log(`🌐 Backend URL: ${API_BASE_URL}`);
-      
-      const response = await authClient.get(API_ENDPOINTS.HEALTH, {
-        timeout: 15000,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        },
-      });
-      
-      console.log('✅ Backend connection successful:', response.data);
-      return { 
-        success: true, 
-        data: response.data,
-        status: response.status,
-        attempt 
-      };
-    } catch (error: any) {
-      console.error(`❌ Backend connection failed (Attempt ${attempt}/${retries}):`, {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status,
-        url: error.config?.url,
-        isCorsError: error.isCorsError
-      });
-      
-      // If not the last attempt, wait before retrying
-      if (attempt < retries) {
-        console.log(`⏳ Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      } else {
-        // Final attempt failed
+  const endpoints = [
+    '/health',
+    '/health/ping',
+    '/',
+    '/api/health'
+  ];
+
+  for (const endpoint of endpoints) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔍 Testing backend connection to ${endpoint} (Attempt ${attempt}/${retries})...`);
+        console.log(`🌐 Backend URL: ${API_BASE_URL}`);
+        
+        const response = await authClient.get(endpoint, {
+          timeout: 15000,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+        });
+        
+        console.log(`✅ Backend connection successful to ${endpoint}:`, response.data);
         return { 
-          success: false, 
-          error: error.message,
+          success: true, 
+          data: response.data,
+          status: response.status,
+          endpoint,
+          attempt 
+        };
+      } catch (error: any) {
+        console.error(`❌ Backend connection failed for ${endpoint} (Attempt ${attempt}/${retries}):`, {
+          message: error.message,
           code: error.code,
           status: error.response?.status,
-          isCorsError: error.isCorsError || false,
-          attempts: retries
-        };
+          url: error.config?.url,
+          isCorsError: error.isCorsError
+        });
+        
+        // If not the last attempt, wait before retrying
+        if (attempt < retries) {
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
   }
   
+  // Final attempt failed for all endpoints
   return { 
     success: false, 
-    error: 'Max retry attempts reached',
+    error: 'All connection attempts failed for all endpoints',
     attempts: retries
   };
 };
 
 // Direct fetch test (bypass axios)
 export const testBackendWithFetch = async () => {
-  try {
-    console.log('🔍 Testing backend with fetch API...');
-    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      mode: 'cors',
-      credentials: 'omit',
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ Fetch test successful:', data);
-      return { success: true, data };
-    } else {
-      console.error('❌ Fetch test failed:', response.status, response.statusText);
-      return { success: false, status: response.status, statusText: response.statusText };
+  const endpoints = [
+    '/health',
+    '/health/ping',
+    '/',
+    '/api/health'
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`🔍 Testing backend with fetch API to: ${endpoint}`);
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Fetch test successful to ${endpoint}:`, data);
+        return { success: true, data, endpoint };
+      } else {
+        console.error(`❌ Fetch test failed for ${endpoint}:`, response.status, response.statusText);
+      }
+    } catch (error: any) {
+      console.error(`❌ Fetch test error for ${endpoint}:`, error);
     }
-  } catch (error: any) {
-    console.error('❌ Fetch test error:', error);
-    return { success: false, error: error.message };
   }
+  
+  return { success: false, error: 'All fetch attempts failed' };
 };
 
 // Test with different endpoints
 export const testMultipleEndpoints = async () => {
   const endpoints = [
-    API_ENDPOINTS.HEALTH,
-    '/api/health/detailed',
     '/health',
-    '/'
+    '/health/ping',
+    '/health/detailed',
+    '/',
+    '/api/health'
   ];
   
   const results = [];
