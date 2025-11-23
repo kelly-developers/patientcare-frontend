@@ -20,6 +20,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   signup: (data: SignupRequest) => Promise<{ success: boolean; error?: string }>;
   isLoading: boolean;
+  backendStatus: 'checking' | 'connected' | 'error';
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,10 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const { toast } = useToast();
 
   useEffect(() => {
-    const initializeAuth = () => {
+    const initializeAuth = async () => {
       try {
         const token = getToken();
         const user = getUser();
@@ -45,11 +47,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAuthenticated(false);
           setCurrentUser(null);
         }
+
+        // Test backend connection
+        const connection = await import('@/config/api').then(module => module.testBackendConnection());
+        setBackendStatus(connection.success ? 'connected' : 'error');
+        
       } catch (error) {
         console.error('❌ Error initializing auth:', error);
         removeTokens();
         setIsAuthenticated(false);
         setCurrentUser(null);
+        setBackendStatus('error');
       } finally {
         setIsLoading(false);
       }
@@ -62,6 +70,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('📝 Signup attempt with data:', { ...data, password: '***' });
       
+      if (backendStatus === 'error') {
+        return { 
+          success: false, 
+          error: 'Cannot connect to server. Please try again later.' 
+        };
+      }
+
       const response = await authService.signup(data);
       
       console.log('✅ Signup response:', response);
@@ -83,7 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         return { success: true };
       } else {
-        console.error('❌ Invalid signup response structure:', response);
         return { 
           success: false, 
           error: response.message || 'Invalid response from server' 
@@ -98,28 +112,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorMessage = 'Network error. Please check your connection and try again.';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
       } else if (error.message) {
         errorMessage = error.message;
-      } else if (error.response?.data) {
-        // Handle validation errors
-        const data = error.response.data;
-        if (typeof data === 'object') {
-          const firstError = Object.values(data)[0];
-          if (Array.isArray(firstError)) {
-            errorMessage = firstError[0] || errorMessage;
-          } else if (typeof firstError === 'string') {
-            errorMessage = firstError;
-          }
-        }
       }
-      
-      toast({
-        title: "Signup Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
       
       return { success: false, error: errorMessage };
     }
@@ -128,6 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       console.log('🔑 Login attempt for user:', username);
+      
+      if (backendStatus === 'error') {
+        return { 
+          success: false, 
+          error: 'Cannot connect to server. Please try again later.' 
+        };
+      }
+
       const response = await authService.login({ username, password });
       
       console.log('✅ Login response:', response);
@@ -149,7 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         return { success: true };
       } else {
-        console.error('❌ Invalid login response structure:', response);
         return { 
           success: false, 
           error: response.message || 'Invalid response from server' 
@@ -164,21 +166,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorMessage = 'Network error. Please check your connection.';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.message) {
-        errorMessage = error.message;
       } else if (error.response?.status === 401) {
         errorMessage = 'Invalid username or password';
-      } else if (error.response?.status === 404) {
-        errorMessage = 'Service unavailable. Please try again later.';
       }
-      
-      toast({
-        title: "Login Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
       
       return { success: false, error: errorMessage };
     }
@@ -189,7 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authService.logout();
     } catch (error) {
       console.error('❌ Logout error:', error);
-      // Even if the API call fails, we should clear local state
     } finally {
       setIsAuthenticated(false);
       setCurrentUser(null);
@@ -208,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     signup,
     isLoading,
+    backendStatus,
   };
 
   return (

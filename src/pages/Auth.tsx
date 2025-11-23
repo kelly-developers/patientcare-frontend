@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle, Loader2 } from 'lucide-react';
+import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +30,7 @@ export default function Auth() {
   const [activeTab, setActiveTab] = useState('signin');
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { isAuthenticated, login, signup, isLoading } = useAuth();
+  const { isAuthenticated, login, signup, isLoading, backendStatus } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
@@ -38,7 +38,6 @@ export default function Auth() {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
-  // Show loading spinner while checking auth state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -58,6 +57,15 @@ export default function Auth() {
       toast({
         title: "Missing Information",
         description: "Please enter both username and password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (backendStatus === 'error') {
+      toast({
+        title: "Server Unavailable",
+        description: "Cannot connect to the server. Please try again later.",
         variant: "destructive",
       });
       return;
@@ -94,7 +102,6 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
     if (!username || !email || !password || !firstName || !lastName) {
       toast({
         title: "Missing Information",
@@ -122,16 +129,25 @@ export default function Auth() {
       return;
     }
 
+    if (backendStatus === 'error') {
+      toast({
+        title: "Server Unavailable",
+        description: "Cannot connect to the server. Please try again later.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const signupData = {
-        username,
-        email,
-        password,
-        firstName,
-        lastName,
-        role: 'DOCTOR', // Default role
+      const signupData: SignupFormData = {
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        role: 'DOCTOR',
       };
 
       const result = await signup(signupData);
@@ -140,7 +156,6 @@ export default function Auth() {
           title: "Account Created",
           description: "Your medical professional account has been created",
         });
-        // Reset form
         setUsername('');
         setEmail('');
         setPassword('');
@@ -193,7 +208,6 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4 bg-slate-900">
-      {/* Enhanced Background with Medical Theme */}
       <div className="absolute inset-0 z-0">
         <img 
           src={authBackground} 
@@ -204,7 +218,6 @@ export default function Auth() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 via-slate-900/20 to-slate-900/40" />
       </div>
 
-      {/* Animated ECG Line */}
       <div className="absolute top-0 left-0 right-0 z-5 h-3 bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80">
         <div className="h-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></div>
       </div>
@@ -243,20 +256,30 @@ export default function Auth() {
 
             <HospitalStats />
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-blue-600/90 rounded-xl border-2 border-blue-400 shadow-lg">
-                <Shield className="w-8 h-8 text-green-300" />
-                <div>
-                  <div className="font-bold text-white text-lg">HIPAA Compliant</div>
-                  <div className="text-green-100 font-medium">End-to-end encrypted data protection</div>
+            {/* Backend Status Indicator */}
+            <div className={`flex items-center gap-3 p-4 rounded-xl border-2 shadow-lg ${
+              backendStatus === 'connected' 
+                ? 'bg-green-600/90 border-green-400' 
+                : backendStatus === 'error'
+                ? 'bg-red-600/90 border-red-400'
+                : 'bg-yellow-600/90 border-yellow-400'
+            }`}>
+              {backendStatus === 'connected' ? (
+                <Wifi className="w-6 h-6 text-green-300" />
+              ) : (
+                <WifiOff className="w-6 h-6 text-red-300" />
+              )}
+              <div>
+                <div className="font-bold text-white text-lg">
+                  {backendStatus === 'connected' ? 'Server Connected' : 
+                   backendStatus === 'error' ? 'Server Offline' : 'Checking Connection'}
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-4 p-4 bg-emerald-600/90 rounded-xl border-2 border-emerald-400 shadow-lg">
-                <AlertCircle className="w-8 h-8 text-yellow-300" />
-                <div>
-                  <div className="font-bold text-white text-lg">Emergency Ready</div>
-                  <div className="text-yellow-100 font-medium">24/7 critical care support</div>
+                <div className={`text-sm font-medium ${
+                  backendStatus === 'connected' ? 'text-green-100' : 'text-red-100'
+                }`}>
+                  {backendStatus === 'connected' 
+                    ? 'Backend service is ready' 
+                    : 'Cannot connect to backend service'}
                 </div>
               </div>
             </div>
@@ -265,7 +288,6 @@ export default function Auth() {
           {/* Right Side - Authentication Form */}
           <div className="animate-slide-up">
             <Card className="border-3 border-blue-400/50 shadow-2xl bg-gradient-to-br from-slate-800/95 to-slate-900/95 backdrop-blur-sm overflow-hidden">
-              {/* Header Pulse Animation */}
               <div className="relative">
                 <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-red-500 via-blue-500 to-emerald-500 animate-pulse"></div>
                 <CardHeader className="space-y-2 pb-6 pt-8">
@@ -314,7 +336,7 @@ export default function Auth() {
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       <div className="space-y-3">
@@ -330,13 +352,13 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       <Button
                         type="submit"
                         className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3.5 text-base shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-500/50 h-14"
-                        disabled={loading}
+                        disabled={loading || backendStatus === 'error'}
                       >
                         {loading ? (
                           <div className="flex items-center gap-3">
@@ -369,7 +391,7 @@ export default function Auth() {
                             value={firstName}
                             onChange={(e) => setFirstName(e.target.value)}
                             required
-                            disabled={loading}
+                            disabled={loading || backendStatus === 'error'}
                           />
                         </div>
                         <div className="space-y-3">
@@ -385,7 +407,7 @@ export default function Auth() {
                             value={lastName}
                             onChange={(e) => setLastName(e.target.value)}
                             required
-                            disabled={loading}
+                            disabled={loading || backendStatus === 'error'}
                           />
                         </div>
                       </div>
@@ -403,7 +425,7 @@ export default function Auth() {
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       
@@ -420,7 +442,7 @@ export default function Auth() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       
@@ -437,7 +459,7 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       <div className="space-y-3">
@@ -453,13 +475,13 @@ export default function Auth() {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           required
-                          disabled={loading}
+                          disabled={loading || backendStatus === 'error'}
                         />
                       </div>
                       <Button
                         type="submit"
                         className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3.5 text-base shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-green-500/50 h-14"
-                        disabled={loading}
+                        disabled={loading || backendStatus === 'error'}
                       >
                         {loading ? (
                           <div className="flex items-center gap-3">
@@ -477,7 +499,6 @@ export default function Auth() {
                   </TabsContent>
                 </Tabs>
 
-                {/* Security Notice */}
                 <div className="mt-8 p-4 bg-amber-500/90 rounded-xl border-2 border-amber-400 shadow-lg">
                   <div className="flex items-center gap-3 text-amber-50">
                     <AlertCircle className="w-5 h-5 flex-shrink-0" />

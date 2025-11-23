@@ -9,43 +9,15 @@ export const API_ENDPOINTS = {
     LOGOUT: '/api/auth/logout',
     REFRESH: '/api/auth/refresh',
     VERIFY: '/api/auth/verify',
+    HEALTH: '/api/auth/health',
   },
   PATIENTS: {
     BASE: '/api/patients',
     BY_ID: (id: string) => `/api/patients/${id}`,
     SEARCH: '/api/patients/search',
-    CONSENT: (id: string) => `/api/patients/${id}/consent`,
-    EXPORT_EXCEL: '/api/patients/export/excel',
-    EXPORT_PDF: '/api/patients/export/pdf',
-  },
-  PROCEDURES: {
-    BASE: '/api/procedures',
-    BY_ID: (id: string) => `/api/procedures/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/procedures/patient/${patientId}`,
-  },
-  VITAL_DATA: {
-    BASE: '/api/vital-data',
-    BY_ID: (id: string) => `/api/vital-data/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/vital-data/patient/${patientId}`,
-  },
-  APPOINTMENTS: {
-    BASE: '/api/appointments',
-    BY_ID: (id: string) => `/api/appointments/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/appointments/patient/${patientId}`,
-  },
-  ANALYSIS: {
-    BASE: '/api/analysis',
-    BY_ID: (id: string) => `/api/analysis/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/analysis/patient/${patientId}`,
-  },
-  PRESCRIPTIONS: {
-    BASE: '/api/prescriptions',
-    BY_ID: (id: string) => `/api/prescriptions/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/prescriptions/patient/${patientId}`,
   },
   USERS: {
     PROFILE: '/api/users/profile',
-    UPDATE_PROFILE: '/api/users/profile',
   },
 };
 
@@ -120,11 +92,6 @@ export const getUser = (): any => {
       return null;
     } catch (error) {
       console.error('Error parsing user data from localStorage:', error);
-      try {
-        localStorage.removeItem(USER_KEY);
-      } catch (e) {
-        console.error('Error clearing invalid user data:', e);
-      }
       return null;
     }
   }
@@ -141,146 +108,66 @@ export const setUser = (user: any): void => {
   }
 };
 
-// Axios instance configuration
+// Axios instance for auth requests
 import axios from 'axios';
 
-// Create base client configuration
-const createClient = (baseURL: string) => {
-  const client = axios.create({
-    baseURL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    timeout: 30000,
-  });
-
-  // Add request interceptor for debugging
-  client.interceptors.request.use(
-    (config) => {
-      console.log(`🚀 ${config.method?.toUpperCase()} request to: ${config.url}`, {
-        headers: config.headers,
-        data: config.data ? { ...config.data, password: config.data.password ? '***' : undefined } : undefined
-      });
-      return config;
-    },
-    (error) => {
-      console.error('❌ Request error:', error);
-      return Promise.reject(error);
-    }
-  );
-
-  // Add response interceptor for debugging
-  client.interceptors.response.use(
-    (response) => {
-      console.log(`✅ Response from ${response.config.url}:`, {
-        status: response.status,
-        data: response.data
-      });
-      return response;
-    },
-    (error) => {
-      console.error(`❌ Error from ${error.config?.url}:`, {
-        status: error.response?.status,
-        message: error.message,
-        response: error.response?.data
-      });
-      return Promise.reject(error);
-    }
-  );
-
-  return client;
-};
-
-// Main API client with token management
-export const apiClient = createClient(API_BASE_URL);
-
-// Request interceptor to add token - BUT NOT FOR AUTH ENDPOINTS
-apiClient.interceptors.request.use(
-  (config) => {
-    // Don't add Authorization header for auth endpoints
-    if (config.url?.includes('/api/auth/')) {
-      console.log('🔐 Auth endpoint - skipping Authorization header');
-      delete config.headers.Authorization;
-      return config;
-    }
-    
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-      console.log('🔑 Added Authorization header');
-    } else {
-      console.log('⚠️ No token found for protected endpoint');
-    }
-    return config;
+export const authClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
   },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  timeout: 30000,
+  withCredentials: false,
+});
 
-// Response interceptor to handle errors
-apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  async (error) => {
-    const originalRequest = error.config;
-
-    // Handle network errors
-    if (!error.response) {
-      console.error('🌐 Network error:', error);
-      return Promise.reject(new Error('Network error. Please check your connection.'));
-    }
-
-    // Handle 401 errors (token expired) - but not for auth endpoints
-    if (error.response.status === 401 && !originalRequest._retry && 
-        !originalRequest.url?.includes('/api/auth/')) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = getRefreshToken();
-        if (!refreshToken) {
-          removeTokens();
-          window.location.href = '/auth';
-          return Promise.reject(error);
-        }
-
-        const response = await axios.post(
-          `${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
-          { refreshToken }
-        );
-
-        const { token } = response.data.data;
-        setToken(token);
-
-        // Retry the original request with new token
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        removeTokens();
-        window.location.href = '/auth';
-        return Promise.reject(refreshError);
-      }
-    }
-
-    // Handle other errors
-    return Promise.reject(error);
-  }
-);
-
-// Special auth client that never adds tokens
-export const authClient = createClient(API_BASE_URL);
-
-// Remove any Authorization headers from auth client requests
+// Request interceptor
 authClient.interceptors.request.use(
   (config) => {
-    // Ensure no Authorization header for auth requests
-    if (config.url?.includes('/api/auth/')) {
-      delete config.headers.Authorization;
-    }
+    console.log(`🚀 ${config.method?.toUpperCase()} request to: ${config.url}`, {
+      data: config.data ? { ...config.data, password: config.data.password ? '***' : undefined } : undefined
+    });
     return config;
   },
   (error) => {
+    console.error('❌ Request error:', error);
     return Promise.reject(error);
   }
 );
+
+// Response interceptor
+authClient.interceptors.response.use(
+  (response) => {
+    console.log(`✅ Response from ${response.config.url}:`, {
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
+  (error) => {
+    console.error(`❌ Error from ${error.config?.url}:`, {
+      status: error.response?.status,
+      message: error.message,
+      code: error.code,
+      response: error.response?.data
+    });
+    return Promise.reject(error);
+  }
+);
+
+// Test backend connection
+export const testBackendConnection = async () => {
+  try {
+    console.log('🔍 Testing backend connection...');
+    const response = await authClient.get(API_ENDPOINTS.AUTH.HEALTH);
+    console.log('✅ Backend connection successful:', response.data);
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.error('❌ Backend connection failed:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      code: error.code,
+      status: error.response?.status 
+    };
+  }
+};
