@@ -11,17 +11,9 @@ export const API_ENDPOINTS = {
     VERIFY: '/api/auth/verify',
     HEALTH: '/api/auth/health',
   },
-  PATIENTS: {
-    BASE: '/api/patients',
-    BY_ID: (id: string) => `/api/patients/${id}`,
-    SEARCH: '/api/patients/search',
-  },
-  USERS: {
-    PROFILE: '/api/users/profile',
-  },
 };
 
-// Token management
+// Token management (keep your existing functions)
 export const TOKEN_KEY = 'patientcare_token';
 export const REFRESH_TOKEN_KEY = 'patientcare_refresh_token';
 export const USER_KEY = 'patientcare_user';
@@ -111,13 +103,15 @@ export const setUser = (user: any): void => {
 // Axios instance for auth requests
 import axios from 'axios';
 
+// Create axios instance with CORS-friendly configuration
 export const authClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
   timeout: 30000,
-  withCredentials: false,
+  withCredentials: false, // Keep this as false
 });
 
 // Request interceptor
@@ -150,24 +144,73 @@ authClient.interceptors.response.use(
       code: error.code,
       response: error.response?.data
     });
+    
+    // Handle CORS errors specifically
+    if (error.code === 'ERR_NETWORK' || error.message.includes('blocked by DevTools')) {
+      console.error('🌐 CORS Error Detected: Request was blocked by browser CORS policy');
+      error.isCorsError = true;
+    }
+    
     return Promise.reject(error);
   }
 );
 
-// Test backend connection
+// Enhanced backend connection test
 export const testBackendConnection = async () => {
   try {
     console.log('🔍 Testing backend connection...');
-    const response = await authClient.get(API_ENDPOINTS.AUTH.HEALTH);
+    
+    // Test with different methods
+    const response = await authClient.get('/api/auth/health', {
+      timeout: 10000,
+    });
+    
     console.log('✅ Backend connection successful:', response.data);
-    return { success: true, data: response.data };
+    return { 
+      success: true, 
+      data: response.data,
+      status: response.status 
+    };
   } catch (error: any) {
-    console.error('❌ Backend connection failed:', error);
+    console.error('❌ Backend connection failed:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      isCorsError: error.isCorsError
+    });
+    
     return { 
       success: false, 
       error: error.message,
       code: error.code,
-      status: error.response?.status 
+      status: error.response?.status,
+      isCorsError: error.isCorsError || false
     };
+  }
+};
+
+// Direct fetch test (bypass axios)
+export const testBackendWithFetch = async () => {
+  try {
+    console.log('🔍 Testing backend with fetch API...');
+    const response = await fetch(`${API_BASE_URL}/api/auth/health`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Fetch test successful:', data);
+      return { success: true, data };
+    } else {
+      console.error('❌ Fetch test failed:', response.status);
+      return { success: false, status: response.status };
+    }
+  } catch (error: any) {
+    console.error('❌ Fetch test error:', error);
+    return { success: false, error: error.message };
   }
 };
