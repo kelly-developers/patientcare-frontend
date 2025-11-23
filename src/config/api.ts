@@ -114,14 +114,12 @@ export const getUser = (): any => {
   if (typeof window !== 'undefined') {
     try {
       const user = localStorage.getItem(USER_KEY);
-      // FIXED: Check if user is not null, undefined, or the string "undefined"
       if (user && user !== 'undefined' && user !== 'null') {
         return JSON.parse(user);
       }
       return null;
     } catch (error) {
       console.error('Error parsing user data from localStorage:', error);
-      // Clear invalid data
       try {
         localStorage.removeItem(USER_KEY);
       } catch (e) {
@@ -146,20 +144,62 @@ export const setUser = (user: any): void => {
 // Axios instance configuration
 import axios from 'axios';
 
-export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 30000, // 30 seconds timeout
-});
+// Create base client configuration
+const createClient = (baseURL: string) => {
+  const client = axios.create({
+    baseURL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+  });
+
+  // Add request interceptor for debugging
+  client.interceptors.request.use(
+    (config) => {
+      console.log(`🚀 ${config.method?.toUpperCase()} request to: ${config.url}`, {
+        headers: config.headers,
+        data: config.data ? { ...config.data, password: config.data.password ? '***' : undefined } : undefined
+      });
+      return config;
+    },
+    (error) => {
+      console.error('❌ Request error:', error);
+      return Promise.reject(error);
+    }
+  );
+
+  // Add response interceptor for debugging
+  client.interceptors.response.use(
+    (response) => {
+      console.log(`✅ Response from ${response.config.url}:`, {
+        status: response.status,
+        data: response.data
+      });
+      return response;
+    },
+    (error) => {
+      console.error(`❌ Error from ${error.config?.url}:`, {
+        status: error.response?.status,
+        message: error.message,
+        response: error.response?.data
+      });
+      return Promise.reject(error);
+    }
+  );
+
+  return client;
+};
+
+// Main API client with token management
+export const apiClient = createClient(API_BASE_URL);
 
 // Request interceptor to add token - BUT NOT FOR AUTH ENDPOINTS
 apiClient.interceptors.request.use(
   (config) => {
     // Don't add Authorization header for auth endpoints
     if (config.url?.includes('/api/auth/')) {
-      // Remove any existing Authorization header for auth requests
+      console.log('🔐 Auth endpoint - skipping Authorization header');
       delete config.headers.Authorization;
       return config;
     }
@@ -167,6 +207,9 @@ apiClient.interceptors.request.use(
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('🔑 Added Authorization header');
+    } else {
+      console.log('⚠️ No token found for protected endpoint');
     }
     return config;
   },
@@ -185,7 +228,7 @@ apiClient.interceptors.response.use(
 
     // Handle network errors
     if (!error.response) {
-      console.error('Network error:', error);
+      console.error('🌐 Network error:', error);
       return Promise.reject(new Error('Network error. Please check your connection.'));
     }
 
@@ -226,10 +269,18 @@ apiClient.interceptors.response.use(
 );
 
 // Special auth client that never adds tokens
-export const authClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
+export const authClient = createClient(API_BASE_URL);
+
+// Remove any Authorization headers from auth client requests
+authClient.interceptors.request.use(
+  (config) => {
+    // Ensure no Authorization header for auth requests
+    if (config.url?.includes('/api/auth/')) {
+      delete config.headers.Authorization;
+    }
+    return config;
   },
-  timeout: 30000,
-});
+  (error) => {
+    return Promise.reject(error);
+  }
+);
