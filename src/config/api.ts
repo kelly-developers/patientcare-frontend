@@ -154,9 +154,16 @@ export const apiClient = axios.create({
   timeout: 30000, // 30 seconds timeout
 });
 
-// Request interceptor to add token
+// Request interceptor to add token - BUT NOT FOR AUTH ENDPOINTS
 apiClient.interceptors.request.use(
   (config) => {
+    // Don't add Authorization header for auth endpoints
+    if (config.url?.includes('/api/auth/')) {
+      // Remove any existing Authorization header for auth requests
+      delete config.headers.Authorization;
+      return config;
+    }
+    
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -182,8 +189,9 @@ apiClient.interceptors.response.use(
       return Promise.reject(new Error('Network error. Please check your connection.'));
     }
 
-    // Handle 401 errors (token expired)
-    if (error.response.status === 401 && !originalRequest._retry) {
+    // Handle 401 errors (token expired) - but not for auth endpoints
+    if (error.response.status === 401 && !originalRequest._retry && 
+        !originalRequest.url?.includes('/api/auth/')) {
       originalRequest._retry = true;
 
       try {
@@ -216,3 +224,12 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Special auth client that never adds tokens
+export const authClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000,
+});

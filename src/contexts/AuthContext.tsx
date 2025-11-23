@@ -64,6 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (data: SignupRequest): Promise<{ success: boolean; error?: string }> => {
     try {
       console.log('Signup attempt with data:', { ...data, password: '***' });
+      
+      // Create a clean API client without any Authorization header for signup
       const response = await authService.signup(data);
       
       console.log('Signup response:', response);
