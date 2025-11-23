@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle } from 'lucide-react';
+import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,13 +30,26 @@ export default function Auth() {
   const [activeTab, setActiveTab] = useState('signin');
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { isAuthenticated, login, signup } = useAuth();
+  const { isAuthenticated, login, signup, isLoading } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !isLoading) {
       navigate('/');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isLoading, navigate]);
+
+  // Show loading spinner while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-center text-white">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-400" />
+          <p className="text-lg font-semibold">Loading Medical Portal...</p>
+          <p className="text-sm text-slate-400 mt-2">Checking authentication status</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

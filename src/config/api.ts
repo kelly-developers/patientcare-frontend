@@ -4,10 +4,10 @@ export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 // API endpoints
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: '/api/auth/signin',
+    LOGIN: '/api/auth/login',
     SIGNUP: '/api/auth/signup',
-    LOGOUT: '/api/auth/signout',
-    REFRESH: '/api/auth/refreshtoken',
+    LOGOUT: '/api/auth/logout',
+    REFRESH: '/api/auth/refresh',
     VERIFY: '/api/auth/verify',
   },
   PATIENTS: {
@@ -56,49 +56,90 @@ export const USER_KEY = 'patientcare_user';
 
 export const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem(TOKEN_KEY);
+    try {
+      return localStorage.getItem(TOKEN_KEY);
+    } catch (error) {
+      console.error('Error getting token from localStorage:', error);
+      return null;
+    }
   }
   return null;
 };
 
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(TOKEN_KEY, token);
+    try {
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch (error) {
+      console.error('Error setting token in localStorage:', error);
+    }
   }
 };
 
 export const getRefreshToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    try {
+      return localStorage.getItem(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('Error getting refresh token from localStorage:', error);
+      return null;
+    }
   }
   return null;
 };
 
 export const setRefreshToken = (token: string): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    try {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    } catch (error) {
+      console.error('Error setting refresh token in localStorage:', error);
+    }
   }
 };
 
 export const removeTokens = (): void => {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } catch (error) {
+      console.error('Error removing tokens from localStorage:', error);
+    }
   }
 };
 
 export const getUser = (): any => {
   if (typeof window !== 'undefined') {
-    const user = localStorage.getItem(USER_KEY);
-    return user ? JSON.parse(user) : null;
+    try {
+      const user = localStorage.getItem(USER_KEY);
+      // FIXED: Check if user is not null, undefined, or the string "undefined"
+      if (user && user !== 'undefined' && user !== 'null') {
+        return JSON.parse(user);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error parsing user data from localStorage:', error);
+      // Clear invalid data
+      try {
+        localStorage.removeItem(USER_KEY);
+      } catch (e) {
+        console.error('Error clearing invalid user data:', e);
+      }
+      return null;
+    }
   }
   return null;
 };
 
 export const setUser = (user: any): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch (error) {
+      console.error('Error saving user data to localStorage:', error);
+    }
   }
 };
 
