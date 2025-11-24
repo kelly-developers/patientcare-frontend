@@ -34,323 +34,6 @@ import { usePatients } from "@/hooks/usePatients";
 import PatientForm from "@/components/PatientForm";
 import { Patient } from "@/services/patientsService";
 
-// Helper functions moved outside the component
-const hasResearchConsent = (patient: Patient) => {
-  return patient?.researchConsent === true || 
-         patient?.research_consent?.dataUse === true ||
-         patient?.research_consent === true;
-};
-
-const hasSampleStorage = (patient: Patient) => {
-  return patient?.sampleStorageConsent === true || 
-         patient?.sample_storage?.storeSamples === true ||
-         patient?.sample_storage_consent === true;
-};
-
-const formatPatientDate = (dateString: any) => {
-  try {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
-  } catch (error) {
-    return 'Invalid Date';
-  }
-};
-
-const getPatientId = (patient: Patient) => {
-  return patient?.patientId || patient?.patient_id || patient?.id || 'N/A';
-};
-
-const getPatientName = (patient: Patient) => {
-  const firstName = patient?.firstName || patient?.first_name || '';
-  const lastName = patient?.lastName || patient?.last_name || '';
-  return `${firstName} ${lastName}`.trim() || 'Unknown Patient';
-};
-
-const getCreatedAt = (patient: Patient) => {
-  return patient?.createdAt || patient?.created_at || new Date().toISOString();
-};
-
-const getPatientStatus = (patient: Patient) => {
-  return patient?.status || 'active';
-};
-
-// PatientCard component moved outside and uses the helper functions
-const PatientCard = ({ patient, onViewDetails }: any) => {
-  const hasResearch = hasResearchConsent(patient);
-  const hasSamples = hasSampleStorage(patient);
-  
-  return (
-    <div className="flex items-center justify-between p-4 bg-background rounded-lg border hover:shadow-md transition-shadow">
-      <div className="space-y-1 flex-1">
-        <div className="font-medium text-foreground">
-          {getPatientName(patient)}
-        </div>
-        <div className="text-sm text-muted-foreground">
-          ID: {getPatientId(patient)} • DOB: {formatPatientDate(patient.dateOfBirth || patient.date_of_birth)}
-        </div>
-        {patient.email && (
-          <div className="text-xs text-muted-foreground">
-            Email: {patient.email} • Phone: {patient.phone || 'N/A'}
-          </div>
-        )}
-        <div className="flex gap-2 mt-1">
-          {hasResearch && (
-            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-              Research Data
-            </Badge>
-          )}
-          {hasSamples && (
-            <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
-              Sample Storage
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-xs">
-            {getPatientStatus(patient)}
-          </Badge>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button size="sm" variant="outline" onClick={onViewDetails}>
-          View Details
-        </Button>
-        <Button size="sm" variant="ghost">
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-// Enhanced Components
-const EnhancedConsentSection = ({ consent, onChange, loading }: any) => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
-      <div className="space-y-1">
-        <Label htmlFor="dataUse" className="text-base font-medium">
-          Use my health data for research purposes
-        </Label>
-        <p className="text-sm text-muted-foreground">
-          I consent to my anonymized health data being used in medical research studies
-        </p>
-      </div>
-      <Switch
-        id="dataUse"
-        checked={consent.dataUse}
-        onCheckedChange={(checked) => onChange("dataUse", checked)}
-        disabled={loading}
-      />
-    </div>
-
-    {consent.dataUse && (
-      <div className="space-y-4 pl-6 border-l-2 border-blue-200">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="anonymizedData"
-            checked={consent.anonymizedData}
-            onCheckedChange={(checked) => onChange("anonymizedData", checked)}
-            disabled={loading}
-          />
-          <Label htmlFor="anonymizedData" className="text-sm">
-            I understand my data will be anonymized and cannot be traced back to me
-          </Label>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="futureContact"
-            checked={consent.futureContact}
-            onCheckedChange={(checked) => onChange("futureContact", checked)}
-            disabled={loading}
-          />
-          <Label htmlFor="futureContact" className="text-sm">
-            I consent to being contacted about future research studies I may be eligible for
-          </Label>
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Consent Date</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left font-normal"
-                disabled={loading}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {consent.consentDate ? (
-                  format(consent.consentDate, "PPP")
-                ) : (
-                  <span>Select consent date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={consent.consentDate || undefined}
-                onSelect={(date) => onChange("consentDate", date)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const EnhancedSampleStorageSection = ({ 
-  storage, 
-  onChange, 
-  onSampleTypeToggle, 
-  loading, 
-  sampleTypeOptions, 
-  storageDurationOptions 
-}: any) => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border">
-      <div className="space-y-1">
-        <Label htmlFor="storeSamples" className="text-base font-medium">
-          Store my biological samples for research
-        </Label>
-        <p className="text-sm text-muted-foreground">
-          I consent to storing my biological samples for use in future research studies
-        </p>
-      </div>
-      <Switch
-        id="storeSamples"
-        checked={storage.storeSamples}
-        onCheckedChange={(checked) => onChange("storeSamples", checked)}
-        disabled={loading}
-      />
-    </div>
-
-    {storage.storeSamples && (
-      <div className="space-y-4 pl-6 border-l-2 border-green-200">
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Sample Types to Store</Label>
-          <div className="grid grid-cols-1 gap-2">
-            {sampleTypeOptions.map((option: any) => (
-              <div key={option.value} className="flex items-start space-x-2 p-2 rounded-lg border">
-                <Checkbox
-                  id={option.value}
-                  checked={storage.sampleTypes.includes(option.value)}
-                  onCheckedChange={() => onSampleTypeToggle(option.value)}
-                  disabled={loading}
-                />
-                <div className="flex-1">
-                  <Label htmlFor={option.value} className="text-sm font-medium">
-                    {option.value}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {option.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Storage Duration</Label>
-          <Select
-            value={storage.storageDuration}
-            onValueChange={(value) => onChange("storageDuration", value)}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {storageDurationOptions.map((option: any) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="futureResearchUse"
-              checked={storage.futureResearchUse}
-              onCheckedChange={(checked) => onChange("futureResearchUse", checked)}
-              disabled={loading}
-            />
-            <Label htmlFor="futureResearchUse" className="text-sm">
-              I consent to my samples being used in future research studies beyond the current one
-            </Label>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="destructionConsent"
-              checked={storage.destructionConsent}
-              onCheckedChange={(checked) => onChange("destructionConsent", checked)}
-              disabled={loading}
-            />
-            <Label htmlFor="destructionConsent" className="text-sm">
-              I consent to the destruction of my samples at the end of the storage period
-            </Label>
-          </div>
-        </div>
-
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Important Information
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Your samples will be stored securely and used only for approved research purposes. 
-                You may withdraw your consent at any time by contacting our research coordinator.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const EnhancedConsentSummary = ({ researchConsent, sampleStorage }: any) => (
-  <div className="space-y-3">
-    {researchConsent.dataUse && (
-      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-        <div>
-          <span className="text-sm font-medium">Research Data Consent</span>
-          <div className="text-xs text-muted-foreground mt-1">
-            {researchConsent.anonymizedData && "• Data will be anonymized\n"}
-            {researchConsent.futureContact && "• Future contact consented\n"}
-            {researchConsent.consentDate && `• Consent date: ${format(researchConsent.consentDate, "MMM dd, yyyy")}`}
-          </div>
-        </div>
-        <Badge variant="default" className="bg-green-500">
-          Granted
-        </Badge>
-      </div>
-    )}
-    {sampleStorage.storeSamples && (
-      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-        <div>
-          <span className="text-sm font-medium">Sample Storage Consent</span>
-          <div className="text-xs text-muted-foreground mt-1">
-            {sampleStorage.sampleTypes.length > 0 && `• Samples: ${sampleStorage.sampleTypes.join(', ')}\n`}
-            {sampleStorage.storageDuration && `• Duration: ${sampleStorage.storageDuration}\n`}
-            {sampleStorage.futureResearchUse && "• Future research use consented"}
-          </div>
-        </div>
-        <Badge variant="default" className="bg-green-500">
-          Granted
-        </Badge>
-      </div>
-    )}
-  </div>
-);
-
 export default function PatientOnboarding() {
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [activeTab, setActiveTab] = useState("new");
@@ -563,6 +246,46 @@ export default function PatientOnboarding() {
     { value: "inactive", label: "Inactive" },
     { value: "pending", label: "Pending Review" }
   ];
+
+  // Enhanced helper functions
+  const hasResearchConsent = (patient: Patient) => {
+    return patient?.researchConsent === true || 
+           patient?.research_consent?.dataUse === true ||
+           patient?.research_consent === true;
+  };
+
+  const hasSampleStorage = (patient: Patient) => {
+    return patient?.sampleStorageConsent === true || 
+           patient?.sample_storage?.storeSamples === true ||
+           patient?.sample_storage_consent === true;
+  };
+
+  const formatPatientDate = (dateString: any) => {
+    try {
+      if (!dateString) return 'N/A';
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
+
+  const getPatientId = (patient: Patient) => {
+    return patient?.patientId || patient?.patient_id || patient?.id || 'N/A';
+  };
+
+  const getPatientName = (patient: Patient) => {
+    const firstName = patient?.firstName || patient?.first_name || '';
+    const lastName = patient?.lastName || patient?.last_name || '';
+    return `${firstName} ${lastName}`.trim() || 'Unknown Patient';
+  };
+
+  const getCreatedAt = (patient: Patient) => {
+    return patient?.createdAt || patient?.created_at || new Date().toISOString();
+  };
+
+  const getPatientStatus = (patient: Patient) => {
+    return patient?.status || 'active';
+  };
 
   // Filter patients based on status
   const filteredPatients = patients.filter(patient => {
@@ -892,3 +615,279 @@ export default function PatientOnboarding() {
     </div>
   );
 }
+
+// Enhanced Components
+const EnhancedConsentSection = ({ consent, onChange, loading }: any) => (
+  <div className="space-y-4">
+    <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
+      <div className="space-y-1">
+        <Label htmlFor="dataUse" className="text-base font-medium">
+          Use my health data for research purposes
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          I consent to my anonymized health data being used in medical research studies
+        </p>
+      </div>
+      <Switch
+        id="dataUse"
+        checked={consent.dataUse}
+        onCheckedChange={(checked) => onChange("dataUse", checked)}
+        disabled={loading}
+      />
+    </div>
+
+    {consent.dataUse && (
+      <div className="space-y-4 pl-6 border-l-2 border-blue-200">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="anonymizedData"
+            checked={consent.anonymizedData}
+            onCheckedChange={(checked) => onChange("anonymizedData", checked)}
+            disabled={loading}
+          />
+          <Label htmlFor="anonymizedData" className="text-sm">
+            I understand my data will be anonymized and cannot be traced back to me
+          </Label>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="futureContact"
+            checked={consent.futureContact}
+            onCheckedChange={(checked) => onChange("futureContact", checked)}
+            disabled={loading}
+          />
+          <Label htmlFor="futureContact" className="text-sm">
+            I consent to being contacted about future research studies I may be eligible for
+          </Label>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Consent Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-left font-normal"
+                disabled={loading}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {consent.consentDate ? (
+                  format(consent.consentDate, "PPP")
+                ) : (
+                  <span>Select consent date</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={consent.consentDate || undefined}
+                onSelect={(date) => onChange("consentDate", date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+const EnhancedSampleStorageSection = ({ 
+  storage, 
+  onChange, 
+  onSampleTypeToggle, 
+  loading, 
+  sampleTypeOptions, 
+  storageDurationOptions 
+}: any) => (
+  <div className="space-y-4">
+    <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border">
+      <div className="space-y-1">
+        <Label htmlFor="storeSamples" className="text-base font-medium">
+          Store my biological samples for research
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          I consent to storing my biological samples for use in future research studies
+        </p>
+      </div>
+      <Switch
+        id="storeSamples"
+        checked={storage.storeSamples}
+        onCheckedChange={(checked) => onChange("storeSamples", checked)}
+        disabled={loading}
+      />
+    </div>
+
+    {storage.storeSamples && (
+      <div className="space-y-4 pl-6 border-l-2 border-green-200">
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Sample Types to Store</Label>
+          <div className="grid grid-cols-1 gap-2">
+            {sampleTypeOptions.map((option: any) => (
+              <div key={option.value} className="flex items-start space-x-2 p-2 rounded-lg border">
+                <Checkbox
+                  id={option.value}
+                  checked={storage.sampleTypes.includes(option.value)}
+                  onCheckedChange={() => onSampleTypeToggle(option.value)}
+                  disabled={loading}
+                />
+                <div className="flex-1">
+                  <Label htmlFor={option.value} className="text-sm font-medium">
+                    {option.value}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {option.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Storage Duration</Label>
+          <Select
+            value={storage.storageDuration}
+            onValueChange={(value) => onChange("storageDuration", value)}
+            disabled={loading}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {storageDurationOptions.map((option: any) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="futureResearchUse"
+              checked={storage.futureResearchUse}
+              onCheckedChange={(checked) => onChange("futureResearchUse", checked)}
+              disabled={loading}
+            />
+            <Label htmlFor="futureResearchUse" className="text-sm">
+              I consent to my samples being used in future research studies beyond the current one
+            </Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="destructionConsent"
+              checked={storage.destructionConsent}
+              onCheckedChange={(checked) => onChange("destructionConsent", checked)}
+              disabled={loading}
+            />
+            <Label htmlFor="destructionConsent" className="text-sm">
+              I consent to the destruction of my samples at the end of the storage period
+            </Label>
+          </div>
+        </div>
+
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Important Information
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Your samples will be stored securely and used only for approved research purposes. 
+                You may withdraw your consent at any time by contacting our research coordinator.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+const EnhancedConsentSummary = ({ researchConsent, sampleStorage }: any) => (
+  <div className="space-y-3">
+    {researchConsent.dataUse && (
+      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+        <div>
+          <span className="text-sm font-medium">Research Data Consent</span>
+          <div className="text-xs text-muted-foreground mt-1">
+            {researchConsent.anonymizedData && "• Data will be anonymized\n"}
+            {researchConsent.futureContact && "• Future contact consented\n"}
+            {researchConsent.consentDate && `• Consent date: ${format(researchConsent.consentDate, "MMM dd, yyyy")}`}
+          </div>
+        </div>
+        <Badge variant="default" className="bg-green-500">
+          Granted
+        </Badge>
+      </div>
+    )}
+    {sampleStorage.storeSamples && (
+      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+        <div>
+          <span className="text-sm font-medium">Sample Storage Consent</span>
+          <div className="text-xs text-muted-foreground mt-1">
+            {sampleStorage.sampleTypes.length > 0 && `• Samples: ${sampleStorage.sampleTypes.join(', ')}\n`}
+            {sampleStorage.storageDuration && `• Duration: ${sampleStorage.storageDuration}\n`}
+            {sampleStorage.futureResearchUse && "• Future research use consented"}
+          </div>
+        </div>
+        <Badge variant="default" className="bg-green-500">
+          Granted
+        </Badge>
+      </div>
+    )}
+  </div>
+);
+
+const PatientCard = ({ patient, onViewDetails }: any) => {
+  const hasResearch = hasResearchConsent(patient);
+  const hasSamples = hasSampleStorage(patient);
+  
+  return (
+    <div className="flex items-center justify-between p-4 bg-background rounded-lg border hover:shadow-md transition-shadow">
+      <div className="space-y-1 flex-1">
+        <div className="font-medium text-foreground">
+          {getPatientName(patient)}
+        </div>
+        <div className="text-sm text-muted-foreground">
+          ID: {getPatientId(patient)} • DOB: {formatPatientDate(patient.dateOfBirth || patient.date_of_birth)}
+        </div>
+        {patient.email && (
+          <div className="text-xs text-muted-foreground">
+            Email: {patient.email} • Phone: {patient.phone || 'N/A'}
+          </div>
+        )}
+        <div className="flex gap-2 mt-1">
+          {hasResearch && (
+            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+              Research Data
+            </Badge>
+          )}
+          {hasSamples && (
+            <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+              Sample Storage
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs">
+            {getPatientStatus(patient)}
+          </Badge>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button size="sm" variant="outline" onClick={onViewDetails}>
+          View Details
+        </Button>
+        <Button size="sm" variant="ghost">
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
