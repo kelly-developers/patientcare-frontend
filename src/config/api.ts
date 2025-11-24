@@ -170,7 +170,7 @@ export const refreshAuthToken = async (): Promise<boolean> => {
   try {
     const refreshToken = getRefreshToken();
     if (!refreshToken) {
-      console.error('No refresh token available');
+      console.error('❌ No refresh token available');
       removeTokens();
       return false;
     }
@@ -190,13 +190,18 @@ export const refreshAuthToken = async (): Promise<boolean> => {
       return true;
     }
     return false;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Token refresh failed:', error);
-    removeTokens();
     
-    // Redirect to login if in browser
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth';
+    // If refresh token is invalid, clear everything and redirect to login
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.error('🔄 Refresh token invalid, clearing storage...');
+      removeTokens();
+      
+      // Redirect to login if in browser
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth';
+      }
     }
     return false;
   }
@@ -242,6 +247,7 @@ apiClient.interceptors.response.use(
     
     // Handle token expiration - auto refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
+      console.log('🔄 Token expired, attempting refresh...');
       originalRequest._retry = true;
       
       try {
@@ -249,17 +255,15 @@ apiClient.interceptors.response.use(
         if (refreshed) {
           // Retry the original request with new token
           const token = getToken();
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return apiClient(originalRequest);
+          if (token) {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            console.log('🔄 Retrying original request with new token...');
+            return apiClient(originalRequest);
+          }
         }
       } catch (refreshError) {
         console.error('❌ Auto-refresh failed:', refreshError);
-        removeTokens();
-        
-        // Redirect to login page
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth';
-        }
+        // Don't remove tokens here, let the refresh function handle it
       }
     }
     

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiClient, API_ENDPOINTS } from '@/lib/api';
+import { apiClient, API_ENDPOINTS, refreshAuthToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { patientsService } from '@/services/patientsService';
 
@@ -43,7 +43,20 @@ export const usePatients = () => {
       
       console.log('📝 Creating patient:', patientData);
       
-      // Transform data to match backend expectations
+      // Enhanced validation before sending
+      if (!patientData.firstName || !patientData.lastName || !patientData.dateOfBirth || !patientData.gender) {
+        throw new Error('Missing required fields: firstName, lastName, dateOfBirth, gender');
+      }
+
+      // Validate date is not in future (double check)
+      const dob = new Date(patientData.dateOfBirth);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (dob > today) {
+        throw new Error('Date of birth cannot be in the future');
+      }
+
       const transformedData = {
         firstName: patientData.firstName || patientData.first_name,
         lastName: patientData.lastName || patientData.last_name,
