@@ -165,6 +165,43 @@ export const apiClient = axios.create({
   withCredentials: false,
 });
 
+// Token refresh function
+export const refreshAuthToken = async (): Promise<boolean> => {
+  try {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      console.error('No refresh token available');
+      removeTokens();
+      return false;
+    }
+
+    console.log('🔄 Attempting to refresh token...');
+    const response = await authClient.post(API_ENDPOINTS.AUTH.REFRESH, {
+      refreshToken: refreshToken
+    });
+
+    if (response.data.accessToken) {
+      setToken(response.data.accessToken);
+      // Update refresh token if provided
+      if (response.data.refreshToken) {
+        setRefreshToken(response.data.refreshToken);
+      }
+      console.log('✅ Token refreshed successfully');
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Token refresh failed:', error);
+    removeTokens();
+    
+    // Redirect to login if in browser
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth';
+    }
+    return false;
+  }
+};
+
 // Request interceptor for apiClient to add auth token
 apiClient.interceptors.request.use(
   (config) => {
@@ -184,7 +221,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for apiClient
+// Response interceptor for apiClient with auto-refresh
 apiClient.interceptors.response.use(
   (response) => {
     console.log(`✅ Response from ${response.config.url}:`, {
@@ -202,6 +239,29 @@ apiClient.interceptors.response.use(
       code: error.code,
       response: error.response?.data
     });
+    
+    // Handle token expiration - auto refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshed = await refreshAuthToken();
+        if (refreshed) {
+          // Retry the original request with new token
+          const token = getToken();
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return apiClient(originalRequest);
+        }
+      } catch (refreshError) {
+        console.error('❌ Auto-refresh failed:', refreshError);
+        removeTokens();
+        
+        // Redirect to login page
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth';
+        }
+      }
+    }
     
     // Handle CORS errors
     if (error.code === 'ERR_NETWORK' || error.message.includes('CORS') || error.message.includes('blocked')) {
@@ -308,7 +368,7 @@ export const testBackendConnection = async (retries = 3, delay = 2000) => {
   };
 };
 
-// Direct fetch test (bypass axios) - FIXED: Added missing export
+// Direct fetch test (bypass axios)
 export const testBackendWithFetch = async () => {
   const endpoints = [
     '/health',

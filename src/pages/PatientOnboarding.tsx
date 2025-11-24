@@ -113,10 +113,45 @@ export default function PatientOnboarding() {
         return;
       }
 
-      // Validate date format
-      if (patientData.date_of_birth && new Date(patientData.date_of_birth) > new Date()) {
+      // Enhanced date validation
+      const dob = new Date(patientData.date_of_birth);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+      
+      if (isNaN(dob.getTime())) {
+        toast({
+          title: "Invalid date format",
+          description: "Please enter a valid date of birth in YYYY-MM-DD format",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (dob > today) {
         toast({
           title: "Invalid date of birth",
+          description: "Date of birth cannot be in the future",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Validate age (patient must be at least 1 year old)
+      const ageInMs = today.getTime() - dob.getTime();
+      const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
+      
+      if (ageInYears > 120) {
+        toast({
+          title: "Invalid age",
+          description: "Patient age appears to be over 120 years. Please check the date of birth.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (ageInYears < 0) {
+        toast({
+          title: "Invalid date",
           description: "Date of birth cannot be in the future",
           variant: "destructive"
         });
@@ -138,20 +173,16 @@ export default function PatientOnboarding() {
         allergies: patientData.allergies || '',
         currentMedications: patientData.current_medications || '',
         
-        // Enhanced consent data
-        researchConsent: researchConsent.dataUse,
+        // Enhanced consent data with proper defaults
+        researchConsent: researchConsent.dataUse || false,
         researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : null,
-        futureContactConsent: researchConsent.futureContact,
-        anonymizedDataConsent: researchConsent.anonymizedData,
-        sampleStorageConsent: sampleStorage.storeSamples,
-        sampleTypes: sampleStorage.sampleTypes.join(','),
-        storageDuration: sampleStorage.storageDuration,
-        futureResearchUseConsent: sampleStorage.futureResearchUse,
-        destructionConsent: sampleStorage.destructionConsent,
-        
-        // Additional metadata
-        registrationDate: new Date().toISOString(),
-        status: 'active'
+        futureContactConsent: researchConsent.futureContact || false,
+        anonymizedDataConsent: researchConsent.anonymizedData || false,
+        sampleStorageConsent: sampleStorage.storeSamples || false,
+        sampleTypes: sampleStorage.sampleTypes.join(',') || '',
+        storageDuration: sampleStorage.storageDuration || '5years',
+        futureResearchUseConsent: sampleStorage.futureResearchUse || false,
+        destructionConsent: sampleStorage.destructionConsent || false,
       };
       
       console.log('🚀 Final patient data being sent:', completePatientData);
