@@ -19,37 +19,37 @@ export const API_ENDPOINTS = {
   },
   PATIENTS: {
     BASE: '/api/patients',
-    BY_ID: (id) => `/api/patients/${id}`,
+    BY_ID: (id: string) => `/api/patients/${id}`,
     SEARCH: '/api/patients/search',
-    CONSENT: (id) => `/api/patients/${id}/consent`,
+    CONSENT: (id: string) => `/api/patients/${id}/consent`,
     EXPORT_EXCEL: '/api/patients/export/excel',
     EXPORT_PDF: '/api/patients/export/pdf',
   },
   PROCEDURES: {
     BASE: '/api/procedures',
-    BY_ID: (id) => `/api/procedures/${id}`,
-    BY_PATIENT: (patientId) => `/api/procedures/patient/${patientId}`,
+    BY_ID: (id: string) => `/api/procedures/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/procedures/patient/${patientId}`,
     STATUS: '/api/procedures/status',
   },
   APPOINTMENTS: {
     BASE: '/api/appointments',
-    BY_ID: (id) => `/api/appointments/${id}`,
-    BY_PATIENT: (patientId) => `/api/appointments/patient/${patientId}`,
+    BY_ID: (id: string) => `/api/appointments/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/appointments/patient/${patientId}`,
   },
   ANALYSIS: {
     BASE: '/api/analysis',
-    BY_ID: (id) => `/api/analysis/${id}`,
-    BY_PATIENT: (patientId) => `/api/analysis/patient/${patientId}`,
+    BY_ID: (id: string) => `/api/analysis/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/analysis/patient/${patientId}`,
   },
   PRESCRIPTIONS: {
     BASE: '/api/prescriptions',
-    BY_ID: (id) => `/api/prescriptions/${id}`,
-    BY_PATIENT: (patientId) => `/api/prescriptions/patient/${patientId}`,
+    BY_ID: (id: string) => `/api/prescriptions/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/prescriptions/patient/${patientId}`,
   },
   VITAL_DATA: {
     BASE: '/api/vital-data',
-    BY_ID: (id) => `/api/vital-data/${id}`,
-    BY_PATIENT: (patientId) => `/api/vital-data/patient/${patientId}`,
+    BY_ID: (id: string) => `/api/vital-data/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/vital-data/patient/${patientId}`,
   },
   USERS: {
     PROFILE: '/api/users/profile',
@@ -61,7 +61,7 @@ export const TOKEN_KEY = 'patientcare_token';
 export const REFRESH_TOKEN_KEY = 'patientcare_refresh_token';
 export const USER_KEY = 'patientcare_user';
 
-export const getToken = () => {
+export const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
     try {
       return localStorage.getItem(TOKEN_KEY);
@@ -73,7 +73,7 @@ export const getToken = () => {
   return null;
 };
 
-export const setToken = (token) => {
+export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(TOKEN_KEY, token);
@@ -83,7 +83,7 @@ export const setToken = (token) => {
   }
 };
 
-export const getRefreshToken = () => {
+export const getRefreshToken = (): string | null => {
   if (typeof window !== 'undefined') {
     try {
       return localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -95,7 +95,7 @@ export const getRefreshToken = () => {
   return null;
 };
 
-export const setRefreshToken = (token) => {
+export const setRefreshToken = (token: string): void => {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(REFRESH_TOKEN_KEY, token);
@@ -105,7 +105,7 @@ export const setRefreshToken = (token) => {
   }
 };
 
-export const removeTokens = () => {
+export const removeTokens = (): void => {
   if (typeof window !== 'undefined') {
     try {
       localStorage.removeItem(TOKEN_KEY);
@@ -117,7 +117,7 @@ export const removeTokens = () => {
   }
 };
 
-export const getUser = () => {
+export const getUser = (): any => {
   if (typeof window !== 'undefined') {
     try {
       const user = localStorage.getItem(USER_KEY);
@@ -133,7 +133,7 @@ export const getUser = () => {
   return null;
 };
 
-export const setUser = (user) => {
+export const setUser = (user: any): void => {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -184,7 +184,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for apiClient with auto-refresh
+// Response interceptor for apiClient
 apiClient.interceptors.response.use(
   (response) => {
     console.log(`✅ Response from ${response.config.url}:`, {
@@ -308,8 +308,83 @@ export const testBackendConnection = async (retries = 3, delay = 2000) => {
   };
 };
 
+// Direct fetch test (bypass axios) - FIXED: Added missing export
+export const testBackendWithFetch = async () => {
+  const endpoints = [
+    '/health',
+    '/health/ping',
+    '/',
+    '/api/health'
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`🔍 Testing backend with fetch API to: ${endpoint}`);
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Fetch test successful to ${endpoint}:`, data);
+        return { success: true, data, endpoint };
+      } else {
+        console.error(`❌ Fetch test failed for ${endpoint}:`, response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error(`❌ Fetch test error for ${endpoint}:`, error);
+    }
+  }
+  
+  return { success: false, error: 'All fetch attempts failed' };
+};
+
+// Test with different endpoints
+export const testMultipleEndpoints = async () => {
+  const endpoints = [
+    '/health',
+    '/health/ping',
+    '/health/detailed',
+    '/',
+    '/api/health'
+  ];
+  
+  const results = [];
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`🔍 Testing endpoint: ${endpoint}`);
+      const response = await authClient.get(endpoint, { timeout: 10000 });
+      results.push({
+        endpoint,
+        success: true,
+        status: response.status,
+        data: response.data
+      });
+      console.log(`✅ ${endpoint}: SUCCESS`);
+    } catch (error) {
+      results.push({
+        endpoint,
+        success: false,
+        error: error.message,
+        status: error.response?.status,
+        isCorsError: error.isCorsError
+      });
+      console.log(`❌ ${endpoint}: FAILED - ${error.message}`);
+    }
+  }
+  
+  return results;
+};
+
 // Login function with token storage
-export const loginUser = async (credentials) => {
+export const loginUser = async (credentials: any) => {
   try {
     console.log('🔐 Attempting login...');
     const response = await authClient.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
@@ -329,7 +404,7 @@ export const loginUser = async (credentials) => {
 };
 
 // Logout function
-export const logoutUser = async () => {
+export const logoutUser = async (): Promise<void> => {
   try {
     const refreshToken = getRefreshToken();
     if (refreshToken) {
@@ -342,5 +417,19 @@ export const logoutUser = async () => {
     if (typeof window !== 'undefined') {
       window.location.href = '/auth';
     }
+  }
+};
+
+// Verify token function
+export const verifyToken = async (): Promise<boolean> => {
+  try {
+    const token = getToken();
+    if (!token) return false;
+    
+    const response = await apiClient.get(API_ENDPOINTS.AUTH.VERIFY);
+    return response.status === 200;
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return false;
   }
 };
