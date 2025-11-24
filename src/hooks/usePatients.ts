@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { apiClient, API_ENDPOINTS, refreshAuthToken } from '@/lib/api';
+import { apiClient, API_ENDPOINTS } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { patientsService } from '@/services/patientsService';
 
 export const usePatients = () => {
   const [patients, setPatients] = useState([]);
@@ -17,8 +18,8 @@ export const usePatients = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.BASE);
-      setPatients(response.data);
+      const response = await patientsService.getAll();
+      setPatients(response);
     } catch (error) {
       console.error('Error loading patients:', error);
       setError(error.message);
@@ -42,34 +43,60 @@ export const usePatients = () => {
       
       console.log('📝 Creating patient:', patientData);
       
-      const response = await apiClient.post(API_ENDPOINTS.PATIENTS.BASE, patientData);
+      // Transform data to match backend expectations
+      const transformedData = {
+        firstName: patientData.firstName || patientData.first_name,
+        lastName: patientData.lastName || patientData.last_name,
+        dateOfBirth: patientData.dateOfBirth || patientData.date_of_birth,
+        gender: patientData.gender,
+        phone: patientData.phone || '',
+        email: patientData.email || '',
+        address: patientData.address || '',
+        emergencyContactName: patientData.emergencyContactName || patientData.emergency_contact_name || '',
+        emergencyContactPhone: patientData.emergencyContactPhone || patientData.emergency_contact_phone || '',
+        medicalHistory: patientData.medicalHistory || patientData.medical_history || '',
+        allergies: patientData.allergies || '',
+        currentMedications: patientData.currentMedications || patientData.current_medications || '',
+        
+        // Consent fields with proper defaults
+        researchConsent: patientData.researchConsent || false,
+        researchConsentDate: patientData.researchConsentDate || null,
+        futureContactConsent: patientData.futureContactConsent || false,
+        anonymizedDataConsent: patientData.anonymizedDataConsent || false,
+        sampleStorageConsent: patientData.sampleStorageConsent || false,
+        sampleTypes: patientData.sampleTypes || '',
+        storageDuration: patientData.storageDuration || '',
+        futureResearchUseConsent: patientData.futureResearchUseConsent || false,
+        destructionConsent: patientData.destructionConsent || false,
+      };
+
+      const newPatient = await patientsService.create(transformedData);
       
-      setPatients(prev => [response.data, ...prev]);
+      setPatients(prev => [newPatient, ...prev]);
       
       toast({
         title: "Patient created successfully",
         description: "Patient has been added to the system",
       });
       
-      return response.data;
+      return newPatient;
     } catch (error) {
       console.error('Error creating patient:', error);
       setError(error.message);
       
-      // Handle token expiration specifically
-      if (error.response?.status === 401) {
-        toast({
-          title: "Session expired",
-          description: "Please log in again to continue",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Failed to create patient",
-          description: error.response?.data?.message || "Please try again",
-          variant: "destructive"
-        });
+      let errorMessage = "Failed to create patient";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
+      
+      toast({
+        title: "Failed to create patient",
+        description: errorMessage,
+        variant: "destructive"
+      });
       
       throw error;
     } finally {
@@ -82,11 +109,8 @@ export const usePatients = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.SEARCH, {
-        params: { q: query }
-      });
-      
-      setPatients(response.data);
+      const results = await patientsService.search(query);
+      setPatients(results);
     } catch (error) {
       console.error('Error searching patients:', error);
       setError(error.message);
@@ -108,10 +132,10 @@ export const usePatients = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.put(API_ENDPOINTS.PATIENTS.BY_ID(id), patientData);
+      const updatedPatient = await patientsService.update(id, patientData);
       
       setPatients(prev => prev.map(patient => 
-        patient.id === id ? response.data : patient
+        patient.id === id ? updatedPatient : patient
       ));
       
       toast({
@@ -119,7 +143,7 @@ export const usePatients = () => {
         description: "Patient information has been updated",
       });
       
-      return response.data;
+      return updatedPatient;
     } catch (error) {
       console.error('Error updating patient:', error);
       setError(error.message);
@@ -149,7 +173,7 @@ export const usePatients = () => {
       setLoading(true);
       setError(null);
       
-      await apiClient.delete(API_ENDPOINTS.PATIENTS.BY_ID(id));
+      await patientsService.delete(id);
       
       setPatients(prev => prev.filter(patient => patient.id !== id));
       

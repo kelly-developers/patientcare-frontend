@@ -165,43 +165,6 @@ export const apiClient = axios.create({
   withCredentials: false,
 });
 
-// Token refresh function
-export const refreshAuthToken = async () => {
-  try {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      console.error('No refresh token available');
-      removeTokens();
-      return false;
-    }
-
-    console.log('🔄 Attempting to refresh token...');
-    const response = await authClient.post(API_ENDPOINTS.AUTH.REFRESH, {
-      refreshToken: refreshToken
-    });
-
-    if (response.data.accessToken) {
-      setToken(response.data.accessToken);
-      // Update refresh token if provided
-      if (response.data.refreshToken) {
-        setRefreshToken(response.data.refreshToken);
-      }
-      console.log('✅ Token refreshed successfully');
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('❌ Token refresh failed:', error);
-    removeTokens();
-    
-    // Redirect to login if in browser
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth';
-    }
-    return false;
-  }
-};
-
 // Request interceptor for apiClient to add auth token
 apiClient.interceptors.request.use(
   (config) => {
@@ -239,29 +202,6 @@ apiClient.interceptors.response.use(
       code: error.code,
       response: error.response?.data
     });
-    
-    // Handle token expiration - auto refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      try {
-        const refreshed = await refreshAuthToken();
-        if (refreshed) {
-          // Retry the original request with new token
-          const token = getToken();
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return apiClient(originalRequest);
-        }
-      } catch (refreshError) {
-        console.error('❌ Auto-refresh failed:', refreshError);
-        removeTokens();
-        
-        // Redirect to login page
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth';
-        }
-      }
-    }
     
     // Handle CORS errors
     if (error.code === 'ERR_NETWORK' || error.message.includes('CORS') || error.message.includes('blocked')) {
@@ -368,81 +308,6 @@ export const testBackendConnection = async (retries = 3, delay = 2000) => {
   };
 };
 
-// Direct fetch test (bypass axios)
-export const testBackendWithFetch = async () => {
-  const endpoints = [
-    '/health',
-    '/health/ping',
-    '/',
-    '/api/health'
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`🔍 Testing backend with fetch API to: ${endpoint}`);
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        mode: 'cors',
-        credentials: 'omit',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ Fetch test successful to ${endpoint}:`, data);
-        return { success: true, data, endpoint };
-      } else {
-        console.error(`❌ Fetch test failed for ${endpoint}:`, response.status, response.statusText);
-      }
-    } catch (error) {
-      console.error(`❌ Fetch test error for ${endpoint}:`, error);
-    }
-  }
-  
-  return { success: false, error: 'All fetch attempts failed' };
-};
-
-// Test with different endpoints
-export const testMultipleEndpoints = async () => {
-  const endpoints = [
-    '/health',
-    '/health/ping',
-    '/health/detailed',
-    '/',
-    '/api/health'
-  ];
-  
-  const results = [];
-  
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`🔍 Testing endpoint: ${endpoint}`);
-      const response = await authClient.get(endpoint, { timeout: 10000 });
-      results.push({
-        endpoint,
-        success: true,
-        status: response.status,
-        data: response.data
-      });
-      console.log(`✅ ${endpoint}: SUCCESS`);
-    } catch (error) {
-      results.push({
-        endpoint,
-        success: false,
-        error: error.message,
-        status: error.response?.status,
-        isCorsError: error.isCorsError
-      });
-      console.log(`❌ ${endpoint}: FAILED - ${error.message}`);
-    }
-  }
-  
-  return results;
-};
-
 // Login function with token storage
 export const loginUser = async (credentials) => {
   try {
@@ -477,19 +342,5 @@ export const logoutUser = async () => {
     if (typeof window !== 'undefined') {
       window.location.href = '/auth';
     }
-  }
-};
-
-// Verify token function
-export const verifyToken = async () => {
-  try {
-    const token = getToken();
-    if (!token) return false;
-    
-    const response = await apiClient.get(API_ENDPOINTS.AUTH.VERIFY);
-    return response.status === 200;
-  } catch (error) {
-    console.error('Token verification failed:', error);
-    return false;
   }
 };

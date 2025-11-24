@@ -37,7 +37,7 @@ export default function PatientOnboarding() {
     destructionConsent: false
   });
   const { toast } = useToast();
-  const { patients, addPatient, searchPatients } = usePatients();
+  const { patients, addPatient, searchPatients, loading } = usePatients();
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
@@ -71,11 +71,13 @@ export default function PatientOnboarding() {
   // Fixed onSubmit handler - properly handles form submission
   const handleSubmitWithConsent = async (patientData: any) => {
     try {
+      console.log('📝 Submitting patient data:', patientData);
+      
       // Validate required patient data
-      if (!patientData.first_name || !patientData.last_name || !patientData.date_of_birth) {
+      if (!patientData.first_name || !patientData.last_name || !patientData.date_of_birth || !patientData.gender) {
         toast({
           title: "Missing required information",
-          description: "Please fill in all required patient fields.",
+          description: "Please fill in all required patient fields (First Name, Last Name, Date of Birth, Gender).",
           variant: "destructive"
         });
         return;
@@ -99,7 +101,7 @@ export default function PatientOnboarding() {
         
         // Consent data mapped to backend structure
         researchConsent: researchConsent.dataUse,
-        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()) : null,
+        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : null,
         futureContactConsent: researchConsent.futureContact,
         anonymizedDataConsent: researchConsent.anonymizedData,
         sampleStorageConsent: sampleStorage.storeSamples,
@@ -107,13 +109,9 @@ export default function PatientOnboarding() {
         storageDuration: sampleStorage.storageDuration,
         futureResearchUseConsent: sampleStorage.futureResearchUse,
         destructionConsent: sampleStorage.destructionConsent,
-        
-        // Store additional consent data as JSON
-        consentData: {
-          specificStudies: researchConsent.specificStudies,
-          consentTimestamp: new Date().toISOString()
-        }
       };
+      
+      console.log('🚀 Final patient data being sent:', completePatientData);
       
       await addPatient(completePatientData);
       
@@ -142,12 +140,8 @@ export default function PatientOnboarding() {
       setActiveTab("recent");
       
     } catch (error) {
-      console.error("Error submitting patient data:", error);
-      toast({
-        title: "Registration failed",
-        description: "There was an error registering the patient. Please try again.",
-        variant: "destructive"
-      });
+      console.error("❌ Error submitting patient data:", error);
+      // Error is already handled in the addPatient function
     }
   };
 
@@ -174,14 +168,12 @@ export default function PatientOnboarding() {
 
   // Safe helper functions to access patient data
   const hasResearchConsent = (patient: any) => {
-    // Check both new and old field structures
     return patient?.researchConsent === true || 
            patient?.research_consent?.dataUse === true ||
            patient?.research_consent === true;
   };
 
   const hasSampleStorage = (patient: any) => {
-    // Check both new and old field structures
     return patient?.sampleStorageConsent === true || 
            patient?.sample_storage?.storeSamples === true ||
            patient?.sample_storage_consent === true;
@@ -199,7 +191,7 @@ export default function PatientOnboarding() {
 
   // Safe access to patient ID
   const getPatientId = (patient: any) => {
-    return patient?.patientId || patient?.patient_id || 'N/A';
+    return patient?.patientId || patient?.patient_id || patient?.id || 'N/A';
   };
 
   // Safe access to patient name
@@ -242,7 +234,10 @@ export default function PatientOnboarding() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PatientForm onSubmit={handlePatientFormSubmit} />
+              <PatientForm 
+                onSubmit={handlePatientFormSubmit}
+                isLoading={loading}
+              />
             </CardContent>
           </Card>
 
@@ -272,6 +267,7 @@ export default function PatientOnboarding() {
                     id="dataUse"
                     checked={researchConsent.dataUse}
                     onCheckedChange={(checked) => handleResearchConsentChange("dataUse", checked)}
+                    disabled={loading}
                   />
                 </div>
 
@@ -282,6 +278,7 @@ export default function PatientOnboarding() {
                         id="anonymizedData"
                         checked={researchConsent.anonymizedData}
                         onCheckedChange={(checked) => handleResearchConsentChange("anonymizedData", checked)}
+                        disabled={loading}
                       />
                       <Label htmlFor="anonymizedData" className="text-sm">
                         I understand my data will be anonymized and cannot be traced back to me
@@ -293,6 +290,7 @@ export default function PatientOnboarding() {
                         id="futureContact"
                         checked={researchConsent.futureContact}
                         onCheckedChange={(checked) => handleResearchConsentChange("futureContact", checked)}
+                        disabled={loading}
                       />
                       <Label htmlFor="futureContact" className="text-sm">
                         I consent to being contacted about future research studies I may be eligible for
@@ -306,6 +304,7 @@ export default function PatientOnboarding() {
                           <Button
                             variant="outline"
                             className="w-full justify-start text-left font-normal"
+                            disabled={loading}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {researchConsent.consentDate ? (
@@ -357,6 +356,7 @@ export default function PatientOnboarding() {
                     id="storeSamples"
                     checked={sampleStorage.storeSamples}
                     onCheckedChange={(checked) => handleSampleStorageChange("storeSamples", checked)}
+                    disabled={loading}
                   />
                 </div>
 
@@ -371,6 +371,7 @@ export default function PatientOnboarding() {
                               id={sampleType}
                               checked={sampleStorage.sampleTypes.includes(sampleType)}
                               onCheckedChange={() => handleSampleTypeToggle(sampleType)}
+                              disabled={loading}
                             />
                             <Label htmlFor={sampleType} className="text-sm">
                               {sampleType}
@@ -385,6 +386,7 @@ export default function PatientOnboarding() {
                       <Select
                         value={sampleStorage.storageDuration}
                         onValueChange={(value) => handleSampleStorageChange("storageDuration", value)}
+                        disabled={loading}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -405,6 +407,7 @@ export default function PatientOnboarding() {
                           id="futureResearchUse"
                           checked={sampleStorage.futureResearchUse}
                           onCheckedChange={(checked) => handleSampleStorageChange("futureResearchUse", checked)}
+                          disabled={loading}
                         />
                         <Label htmlFor="futureResearchUse" className="text-sm">
                           I consent to my samples being used in future research studies beyond the current one
@@ -416,6 +419,7 @@ export default function PatientOnboarding() {
                           id="destructionConsent"
                           checked={sampleStorage.destructionConsent}
                           onCheckedChange={(checked) => handleSampleStorageChange("destructionConsent", checked)}
+                          disabled={loading}
                         />
                         <Label htmlFor="destructionConsent" className="text-sm">
                           I consent to the destruction of my samples at the end of the storage period
@@ -505,7 +509,7 @@ export default function PatientOnboarding() {
                     onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
-                <Button onClick={handleSearch}>
+                <Button onClick={handleSearch} disabled={loading}>
                   <Search className="w-4 h-4 mr-2" />
                   Search
                 </Button>
@@ -520,7 +524,7 @@ export default function PatientOnboarding() {
               {searchQuery && patients.length > 0 && (
                 <div className="space-y-4">
                   {patients.map((patient, index) => (
-                    <div key={patient.id || `patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
+                    <div key={getPatientId(patient) || `patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                       <div className="space-y-1">
                         <div className="font-medium text-foreground">
                           {getPatientName(patient)}
@@ -584,7 +588,7 @@ export default function PatientOnboarding() {
                 </div>
               ) : (
                 patients.slice(0, 5).map((patient, index) => (
-                  <div key={patient.id || `recent-patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
+                  <div key={getPatientId(patient) || `recent-patient-${index}`} className="flex items-center justify-between p-4 bg-background rounded-lg border">
                     <div className="space-y-1">
                       <div className="font-medium text-foreground">
                         {getPatientName(patient)}

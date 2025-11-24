@@ -82,7 +82,7 @@ export const patientsService = {
       return [];
     } catch (error) {
       console.error('Error fetching patients:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -92,16 +92,27 @@ export const patientsService = {
       return response.data?.data || response.data;
     } catch (error) {
       console.error('Error fetching patient by id:', error);
-      return null;
+      throw error;
     }
   },
 
   async create(data: CreatePatientRequest): Promise<Patient | null> {
     try {
+      console.log('📝 Creating patient with data:', data);
+      
+      // Ensure required fields are present
+      if (!data.firstName || !data.lastName || !data.dateOfBirth || !data.gender) {
+        throw new Error('Missing required fields: firstName, lastName, dateOfBirth, gender');
+      }
+
       const response = await apiClient.post(API_ENDPOINTS.PATIENTS.BASE, data);
+      console.log('✅ Patient created successfully:', response.data);
       return response.data?.data || response.data;
     } catch (error) {
-      console.error('Error creating patient:', error);
+      console.error('❌ Error creating patient:', error);
+      if (error.response?.data) {
+        console.error('Backend error details:', error.response.data);
+      }
       throw error;
     }
   },
@@ -112,7 +123,7 @@ export const patientsService = {
       return response.data?.data || response.data;
     } catch (error) {
       console.error('Error updating patient:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -122,7 +133,7 @@ export const patientsService = {
       return true;
     } catch (error) {
       console.error('Error deleting patient:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -142,7 +153,7 @@ export const patientsService = {
       return [];
     } catch (error) {
       console.error('Error searching patients:', error);
-      return [];
+      throw error;
     }
   },
 
@@ -155,35 +166,7 @@ export const patientsService = {
       return response.data?.data || response.data;
     } catch (error) {
       console.error('Error updating consent:', error);
-      return null;
-    }
-  },
-
-  async exportToExcel(patientIds?: string[]): Promise<Blob | null> {
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS.PATIENTS.EXPORT_EXCEL,
-        { patientIds },
-        { responseType: 'blob' }
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error exporting to Excel:', error);
-      return null;
-    }
-  },
-
-  async exportToPDF(patientIds?: string[]): Promise<Blob | null> {
-    try {
-      const response = await apiClient.post(
-        API_ENDPOINTS.PATIENTS.EXPORT_PDF,
-        { patientIds },
-        { responseType: 'blob' }
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error exporting to PDF:', error);
-      return null;
+      throw error;
     }
   },
 };
