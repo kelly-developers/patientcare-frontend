@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface Patient {
   id: string;
@@ -41,6 +40,21 @@ interface VitalData {
   recordedByName: string;
 }
 
+// Token management functions
+const TOKEN_KEY = 'patientcare_token';
+
+const getToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    try {
+      return localStorage.getItem(TOKEN_KEY);
+    } catch (error) {
+      console.error('Error getting token from localStorage:', error);
+      return null;
+    }
+  }
+  return null;
+};
+
 export default function VitalDataCollection() {
   const [vitals, setVitals] = useState<VitalData[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -61,7 +75,6 @@ export default function VitalDataCollection() {
     notes: ""
   });
   const { toast } = useToast();
-  const { getToken } = useAuth();
 
   useEffect(() => {
     loadPatients();
@@ -72,6 +85,15 @@ export default function VitalDataCollection() {
     try {
       setLoading(true);
       const token = getToken();
+      if (!token) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to access patient data",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch('https://patientcarebackend.onrender.com/api/patients', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -92,6 +114,14 @@ export default function VitalDataCollection() {
           }));
           setPatients(patientsData);
         }
+      } else if (response.status === 401) {
+        toast({
+          title: "Session Expired",
+          description: "Please log in again",
+          variant: "destructive",
+        });
+        // Redirect to login or handle token refresh
+        window.location.href = '/auth';
       } else {
         throw new Error('Failed to load patients');
       }
@@ -110,6 +140,8 @@ export default function VitalDataCollection() {
   const loadVitals = async () => {
     try {
       const token = getToken();
+      if (!token) return;
+
       const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data/recorded-by-me', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -139,6 +171,10 @@ export default function VitalDataCollection() {
     const diastolic = vitals.diastolicBP;
     const heartRate = vitals.heartRate;
     const oxygenSat = vitals.oxygenSaturation;
+
+    if (!systolic || !diastolic || !heartRate || !oxygenSat) {
+      return 'low';
+    }
 
     // Critical conditions
     if (systolic > 180 || diastolic > 120 || heartRate > 120 || heartRate < 50 || oxygenSat < 90) {
@@ -181,6 +217,16 @@ export default function VitalDataCollection() {
     setSubmitting(true);
 
     try {
+      const token = getToken();
+      if (!token) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to record vital data",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const vitalDataRequest = {
         patientId: selectedPatient,
         systolicBP: formData.systolicBP ? parseInt(formData.systolicBP) : null,
@@ -196,7 +242,8 @@ export default function VitalDataCollection() {
         notes: formData.notes || undefined
       };
 
-      const token = getToken();
+      console.log('Submitting vital data:', vitalDataRequest);
+
       const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data', {
         method: 'POST',
         headers: {
