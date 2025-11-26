@@ -6,65 +6,121 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiClient, getToken } from "@/services/api";
+
+interface Patient {
+  id: string;
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+}
 
 interface VitalData {
   id: string;
   patientId: string;
   patientName: string;
-  bloodPressureSystolic: number;
-  bloodPressureDiastolic: number;
+  systolicBP: number;
+  diastolicBP: number;
   heartRate: number;
   temperature: number;
   weight: number;
   height: number;
   oxygenSaturation: number;
-  ecgReading?: string;
-  symptoms: string;
+  bloodGlucose?: number;
+  respiratoryRate?: number;
+  painLevel?: number;
+  notes?: string;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  timestamp: string;
-  recordedBy: string;
+  recordedAt: string;
+  recordedByName: string;
 }
 
 export default function VitalDataCollection() {
   const [vitals, setVitals] = useState<VitalData[]>([]);
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    bloodPressureSystolic: "",
-    bloodPressureDiastolic: "",
+    systolicBP: "",
+    diastolicBP: "",
     heartRate: "",
+    respiratoryRate: "",
     temperature: "",
     weight: "",
     height: "",
     oxygenSaturation: "",
-    ecgReading: ""
+    bloodGlucose: "",
+    painLevel: "",
+    notes: ""
   });
   const { toast } = useToast();
 
   useEffect(() => {
-    loadVitals();
     loadPatients();
+    loadVitals();
   }, []);
 
-  const loadVitals = () => {
-    const stored = localStorage.getItem('cardiovascular-vitals');
-    if (stored) {
-      setVitals(JSON.parse(stored));
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      const token = getToken();
+      const response = await apiClient.get('/api/patients', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.data.success) {
+        const patientsData = response.data.data.map((patient: any) => ({
+          id: patient.id,
+          patientId: patient.patientId,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          dateOfBirth: patient.dateOfBirth,
+          gender: patient.gender
+        }));
+        setPatients(patientsData);
+      }
+    } catch (error: any) {
+      console.error('Error loading patients:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to load patients",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadPatients = () => {
-    const stored = localStorage.getItem('patients');
-    if (stored) {
-      setPatients(JSON.parse(stored));
+  const loadVitals = async () => {
+    try {
+      const token = getToken();
+      const response = await apiClient.get('/api/vital-data/recorded-by-me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.data.success) {
+        setVitals(response.data.data);
+      }
+    } catch (error: any) {
+      console.error('Error loading vital data:', error);
+      // Don't show error toast for vital data loading as it might not be critical
     }
   };
 
   const calculateRiskLevel = (vitals: any): 'low' | 'medium' | 'high' | 'critical' => {
-    const systolic = parseInt(vitals.bloodPressureSystolic);
-    const diastolic = parseInt(vitals.bloodPressureDiastolic);
+    const systolic = parseInt(vitals.systolicBP || vitals.bloodPressureSystolic);
+    const diastolic = parseInt(vitals.diastolicBP || vitals.bloodPressureDiastolic);
     const heartRate = parseInt(vitals.heartRate);
     const oxygenSat = parseInt(vitals.oxygenSaturation);
 
@@ -83,7 +139,7 @@ export default function VitalDataCollection() {
     return 'low';
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedPatient) {
@@ -95,48 +151,89 @@ export default function VitalDataCollection() {
       return;
     }
 
-    const selectedPatientData = patients.find(p => p.id === selectedPatient);
-    const riskLevel = calculateRiskLevel(formData);
-    
-    const newVital: VitalData = {
-      id: Date.now().toString(),
-      patientId: selectedPatient,
-      patientName: `${selectedPatientData?.first_name} ${selectedPatientData?.last_name}`,
-      bloodPressureSystolic: parseInt(formData.bloodPressureSystolic),
-      bloodPressureDiastolic: parseInt(formData.bloodPressureDiastolic),
-      heartRate: parseInt(formData.heartRate),
-      temperature: parseFloat(formData.temperature),
-      weight: parseFloat(formData.weight),
-      height: parseFloat(formData.height),
-      oxygenSaturation: parseInt(formData.oxygenSaturation),
-      ecgReading: formData.ecgReading,
-      symptoms: "",
-      riskLevel,
-      timestamp: new Date().toISOString(),
-      recordedBy: "Current User"
-    };
+    // Find selected patient data
+    const selectedPatientData = patients.find(p => p.patientId === selectedPatient);
+    if (!selectedPatientData) {
+      toast({
+        title: "Error",
+        description: "Selected patient not found",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const updatedVitals = [newVital, ...vitals];
-    setVitals(updatedVitals);
-    localStorage.setItem('cardiovascular-vitals', JSON.stringify(updatedVitals));
+    setSubmitting(true);
 
-    // Reset form
-    setFormData({
-      bloodPressureSystolic: "",
-      bloodPressureDiastolic: "",
-      heartRate: "",
-      temperature: "",
-      weight: "",
-      height: "",
-      oxygenSaturation: "",
-      ecgReading: ""
-    });
-    setSelectedPatient("");
+    try {
+      const vitalDataRequest = {
+        patientId: selectedPatient,
+        systolicBP: formData.systolicBP ? parseInt(formData.systolicBP) : null,
+        diastolicBP: formData.diastolicBP ? parseInt(formData.diastolicBP) : null,
+        heartRate: formData.heartRate ? parseInt(formData.heartRate) : null,
+        respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : null,
+        temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+        oxygenSaturation: formData.oxygenSaturation ? parseFloat(formData.oxygenSaturation) : null,
+        height: formData.height ? parseFloat(formData.height) : null,
+        weight: formData.weight ? parseFloat(formData.weight) : null,
+        bloodGlucose: formData.bloodGlucose ? parseFloat(formData.bloodGlucose) : null,
+        painLevel: formData.painLevel ? parseInt(formData.painLevel) : null,
+        notes: formData.notes || undefined
+      };
 
-    toast({
-      title: "Success",
-      description: `Vital data recorded successfully. Risk level: ${riskLevel.toUpperCase()}`,
-    });
+      const token = getToken();
+      const response = await apiClient.post('/api/vital-data', vitalDataRequest, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        const newVital = response.data.data;
+        const riskLevel = calculateRiskLevel(newVital);
+        
+        // Add risk level to the vital data for display
+        const vitalWithRisk = {
+          ...newVital,
+          riskLevel
+        };
+
+        setVitals(prev => [vitalWithRisk, ...prev]);
+        
+        // Reset form
+        setFormData({
+          systolicBP: "",
+          diastolicBP: "",
+          heartRate: "",
+          respiratoryRate: "",
+          temperature: "",
+          weight: "",
+          height: "",
+          oxygenSaturation: "",
+          bloodGlucose: "",
+          painLevel: "",
+          notes: ""
+        });
+        setSelectedPatient("");
+
+        toast({
+          title: "Success",
+          description: `Vital data recorded successfully. Risk level: ${riskLevel.toUpperCase()}`,
+        });
+
+        // Reload vitals to ensure we have the latest data
+        loadVitals();
+      }
+    } catch (error: any) {
+      console.error('Error recording vital data:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to record vital data",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getRiskBadgeColor = (risk: string) => {
@@ -147,6 +244,11 @@ export default function VitalDataCollection() {
       case 'low': return 'bg-green-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
+  };
+
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find(p => p.patientId === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
   return (
@@ -174,18 +276,28 @@ export default function VitalDataCollection() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="patient">Select Patient</Label>
-                <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+                <Select 
+                  value={selectedPatient} 
+                  onValueChange={setSelectedPatient}
+                  disabled={loading || submitting}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose patient..." />
+                    <SelectValue placeholder={loading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
-                      <SelectItem key={patient.id} value={patient.id}>
-                        {patient.first_name} {patient.last_name} - {patient.patient_id}
+                      <SelectItem key={patient.patientId} value={patient.patientId}>
+                        {patient.firstName} {patient.lastName} - {patient.patientId}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {loading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading patients...
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -195,9 +307,12 @@ export default function VitalDataCollection() {
                     id="systolic"
                     type="number"
                     placeholder="120"
-                    value={formData.bloodPressureSystolic}
-                    onChange={(e) => setFormData({...formData, bloodPressureSystolic: e.target.value})}
+                    value={formData.systolicBP}
+                    onChange={(e) => setFormData({...formData, systolicBP: e.target.value})}
                     required
+                    min="50"
+                    max="250"
+                    disabled={submitting}
                   />
                 </div>
                 <div className="space-y-2">
@@ -206,9 +321,12 @@ export default function VitalDataCollection() {
                     id="diastolic"
                     type="number"
                     placeholder="80"
-                    value={formData.bloodPressureDiastolic}
-                    onChange={(e) => setFormData({...formData, bloodPressureDiastolic: e.target.value})}
+                    value={formData.diastolicBP}
+                    onChange={(e) => setFormData({...formData, diastolicBP: e.target.value})}
                     required
+                    min="30"
+                    max="150"
+                    disabled={submitting}
                   />
                 </div>
               </div>
@@ -223,8 +341,27 @@ export default function VitalDataCollection() {
                     value={formData.heartRate}
                     onChange={(e) => setFormData({...formData, heartRate: e.target.value})}
                     required
+                    min="30"
+                    max="250"
+                    disabled={submitting}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="respiratoryRate">Respiratory Rate</Label>
+                  <Input
+                    id="respiratoryRate"
+                    type="number"
+                    placeholder="16"
+                    value={formData.respiratoryRate}
+                    onChange={(e) => setFormData({...formData, respiratoryRate: e.target.value})}
+                    min="8"
+                    max="60"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="temperature">Temperature (°C)</Label>
                   <Input
@@ -235,32 +372,9 @@ export default function VitalDataCollection() {
                     value={formData.temperature}
                     onChange={(e) => setFormData({...formData, temperature: e.target.value})}
                     required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="weight">Weight (kg)</Label>
-                  <Input
-                    id="weight"
-                    type="number"
-                    step="0.1"
-                    placeholder="70"
-                    value={formData.weight}
-                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="height">Height (cm)</Label>
-                  <Input
-                    id="height"
-                    type="number"
-                    placeholder="170"
-                    value={formData.height}
-                    onChange={(e) => setFormData({...formData, height: e.target.value})}
-                    required
+                    min="32"
+                    max="43"
+                    disabled={submitting}
                   />
                 </div>
                 <div className="space-y-2">
@@ -272,22 +386,99 @@ export default function VitalDataCollection() {
                     value={formData.oxygenSaturation}
                     onChange={(e) => setFormData({...formData, oxygenSaturation: e.target.value})}
                     required
+                    min="70"
+                    max="100"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="weight">Weight (kg)</Label>
+                  <Input
+                    id="weight"
+                    type="number"
+                    step="0.1"
+                    placeholder="70"
+                    value={formData.weight}
+                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                    required
+                    min="1"
+                    max="300"
+                    disabled={submitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="height">Height (cm)</Label>
+                  <Input
+                    id="height"
+                    type="number"
+                    placeholder="170"
+                    value={formData.height}
+                    onChange={(e) => setFormData({...formData, height: e.target.value})}
+                    required
+                    min="50"
+                    max="250"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bloodGlucose">Blood Glucose (mg/dL)</Label>
+                  <Input
+                    id="bloodGlucose"
+                    type="number"
+                    placeholder="100"
+                    value={formData.bloodGlucose}
+                    onChange={(e) => setFormData({...formData, bloodGlucose: e.target.value})}
+                    min="20"
+                    max="500"
+                    disabled={submitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="painLevel">Pain Level (0-10)</Label>
+                  <Input
+                    id="painLevel"
+                    type="number"
+                    placeholder="0"
+                    value={formData.painLevel}
+                    onChange={(e) => setFormData({...formData, painLevel: e.target.value})}
+                    min="0"
+                    max="10"
+                    disabled={submitting}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="ecg">ECG Reading (Optional)</Label>
-                <Input
-                  id="ecg"
-                  placeholder="Normal sinus rhythm"
-                  value={formData.ecgReading}
-                  onChange={(e) => setFormData({...formData, ecgReading: e.target.value})}
+                <Label htmlFor="notes">Notes (Optional)</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Additional observations or comments..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  disabled={submitting}
+                  rows={3}
                 />
               </div>
 
-              <Button type="submit" className="w-full bg-gradient-medical text-white">
-                Record Vital Data
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-medical text-white"
+                disabled={submitting || !selectedPatient}
+              >
+                {submitting ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Recording...
+                  </div>
+                ) : (
+                  "Record Vital Data"
+                )}
               </Button>
             </form>
           </CardContent>
@@ -309,25 +500,35 @@ export default function VitalDataCollection() {
               {vitals.map((vital) => (
                 <div key={vital.id} className="p-4 bg-background rounded-lg border">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="font-medium">{vital.patientName}</div>
+                    <div className="font-medium">{getPatientName(vital.patientId)}</div>
                     <Badge className={getRiskBadgeColor(vital.riskLevel)}>
                       {vital.riskLevel.toUpperCase()}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                    <div>BP: {vital.bloodPressureSystolic}/{vital.bloodPressureDiastolic}</div>
+                    <div>BP: {vital.systolicBP || vital.bloodPressureSystolic}/{vital.diastolicBP || vital.bloodPressureDiastolic}</div>
                     <div>HR: {vital.heartRate} BPM</div>
                     <div>Temp: {vital.temperature}°C</div>
                     <div>O2: {vital.oxygenSaturation}%</div>
+                    {vital.respiratoryRate && <div>RR: {vital.respiratoryRate}</div>}
+                    {vital.bloodGlucose && <div>Glucose: {vital.bloodGlucose} mg/dL</div>}
+                    {vital.painLevel !== undefined && <div>Pain: {vital.painLevel}/10</div>}
                   </div>
+                  {vital.notes && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      <strong>Notes:</strong> {vital.notes}
+                    </div>
+                  )}
                   <div className="mt-2 text-xs text-muted-foreground">
-                    {new Date(vital.timestamp).toLocaleString()}
+                    {new Date(vital.recordedAt || vital.timestamp).toLocaleString()}
                   </div>
                 </div>
               ))}
               {vitals.length === 0 && (
                 <div className="text-center text-muted-foreground py-8">
-                  No vital data recorded yet
+                  <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No vital data recorded yet</p>
+                  <p className="text-sm">Start by recording patient vital signs</p>
                 </div>
               )}
             </div>
