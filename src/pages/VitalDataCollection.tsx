@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface Patient {
   id: string;
@@ -40,19 +41,26 @@ interface VitalData {
   recordedByName: string;
 }
 
-// Token management functions
-const TOKEN_KEY = 'patientcare_token';
-
+// Simple token management
 const getToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    try {
-      return localStorage.getItem(TOKEN_KEY);
-    } catch (error) {
-      console.error('Error getting token from localStorage:', error);
-      return null;
-    }
+  try {
+    return localStorage.getItem('patientcare_token');
+  } catch (error) {
+    console.error('Error getting token:', error);
+    return null;
   }
-  return null;
+};
+
+const isTokenValid = (): boolean => {
+  const token = getToken();
+  if (!token) return false;
+  
+  try {
+    // Simple check - in a real app you'd decode and check expiration
+    return token.length > 10;
+  } catch (error) {
+    return false;
+  }
 };
 
 export default function VitalDataCollection() {
@@ -75,23 +83,30 @@ export default function VitalDataCollection() {
     notes: ""
   });
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    // Check authentication first
+    if (!isTokenValid()) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to access this page",
+        variant: "destructive",
+      });
+      navigate('/auth');
+      return;
+    }
+    
     loadPatients();
     loadVitals();
-  }, []);
+  }, [navigate, toast]);
 
   const loadPatients = async () => {
     try {
       setLoading(true);
       const token = getToken();
       if (!token) {
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to access patient data",
-          variant: "destructive",
-        });
-        return;
+        throw new Error('No authentication token found');
       }
 
       const response = await fetch('https://patientcarebackend.onrender.com/api/patients', {
@@ -103,6 +118,7 @@ export default function VitalDataCollection() {
       
       if (response.ok) {
         const result = await response.json();
+        console.log('Patients loaded successfully:', result.data?.length || 0, 'patients');
         if (result.success) {
           const patientsData = result.data.map((patient: any) => ({
             id: patient.id,
@@ -120,10 +136,11 @@ export default function VitalDataCollection() {
           description: "Please log in again",
           variant: "destructive",
         });
-        // Redirect to login or handle token refresh
-        window.location.href = '/auth';
+        localStorage.removeItem('patientcare_token');
+        navigate('/auth');
       } else {
-        throw new Error('Failed to load patients');
+        const errorText = await response.text();
+        throw new Error(`Failed to load patients: ${response.status} ${errorText}`);
       }
     } catch (error: any) {
       console.error('Error loading patients:', error);
@@ -159,6 +176,10 @@ export default function VitalDataCollection() {
           }));
           setVitals(vitalsWithRisk);
         }
+      } else if (response.status === 401) {
+        console.log('Authentication failed for vital data');
+      } else {
+        console.log('Failed to load vital data:', response.status);
       }
     } catch (error: any) {
       console.error('Error loading vital data:', error);
@@ -204,11 +225,65 @@ export default function VitalDataCollection() {
     }
 
     // Validate required fields
-    if (!formData.systolicBP || !formData.diastolicBP || !formData.heartRate || 
-        !formData.temperature || !formData.oxygenSaturation || !formData.weight || !formData.height) {
+    const requiredFields = ['systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation', 'weight', 'height'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+    
+    if (missingFields.length > 0) {
       toast({
-        title: "Error",
-        description: "Please fill in all required vital signs",
+        title: "Missing Information",
+        description: `Please fill in all required vital signs`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate numeric ranges
+    const systolic = parseInt(formData.systolicBP);
+    const diastolic = parseInt(formData.diastolicBP);
+    const heartRate = parseInt(formData.heartRate);
+    const temperature = parseFloat(formData.temperature);
+    const oxygenSat = parseFloat(formData.oxygenSaturation);
+
+    if (systolic < 50 || systolic > 250) {
+      toast({
+        title: "Invalid Value",
+        description: "Systolic BP must be between 50 and 250",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (diastolic < 30 || diastolic > 150) {
+      toast({
+        title: "Invalid Value",
+        description: "Diastolic BP must be between 30 and 150",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (heartRate < 30 || heartRate > 250) {
+      toast({
+        title: "Invalid Value",
+        description: "Heart rate must be between 30 and 250",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (temperature < 32 || temperature > 43) {
+      toast({
+        title: "Invalid Value",
+        description: "Temperature must be between 32°C and 43°C",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (oxygenSat < 70 || oxygenSat > 100) {
+      toast({
+        title: "Invalid Value",
+        description: "Oxygen saturation must be between 70% and 100%",
         variant: "destructive",
       });
       return;
@@ -224,22 +299,24 @@ export default function VitalDataCollection() {
           description: "Please log in to record vital data",
           variant: "destructive",
         });
+        navigate('/auth');
         return;
       }
 
+      // Prepare the request data - ensure all fields are properly formatted
       const vitalDataRequest = {
         patientId: selectedPatient,
-        systolicBP: formData.systolicBP ? parseInt(formData.systolicBP) : null,
-        diastolicBP: formData.diastolicBP ? parseInt(formData.diastolicBP) : null,
-        heartRate: formData.heartRate ? parseInt(formData.heartRate) : null,
+        systolicBP: systolic,
+        diastolicBP: diastolic,
+        heartRate: heartRate,
         respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : null,
-        temperature: formData.temperature ? parseFloat(formData.temperature) : null,
-        oxygenSaturation: formData.oxygenSaturation ? parseFloat(formData.oxygenSaturation) : null,
+        temperature: temperature,
+        oxygenSaturation: oxygenSat,
         height: formData.height ? parseFloat(formData.height) : null,
         weight: formData.weight ? parseFloat(formData.weight) : null,
         bloodGlucose: formData.bloodGlucose ? parseFloat(formData.bloodGlucose) : null,
         painLevel: formData.painLevel ? parseInt(formData.painLevel) : null,
-        notes: formData.notes || undefined
+        notes: formData.notes || null
       };
 
       console.log('Submitting vital data:', vitalDataRequest);
@@ -253,8 +330,17 @@ export default function VitalDataCollection() {
         body: JSON.stringify(vitalDataRequest)
       });
 
+      const responseText = await response.text();
+      let result;
+      
+      try {
+        result = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error('Invalid response from server');
+      }
+
       if (response.ok) {
-        const result = await response.json();
         if (result.success) {
           const newVital = result.data;
           const riskLevel = calculateRiskLevel(newVital);
@@ -290,16 +376,17 @@ export default function VitalDataCollection() {
 
           // Reload vitals to ensure we have the latest data
           loadVitals();
+        } else {
+          throw new Error(result.message || 'Failed to record vital data');
         }
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to record vital data');
+        throw new Error(result.message || `Server error: ${response.status}`);
       }
     } catch (error: any) {
       console.error('Error recording vital data:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to record vital data",
+        description: error.message || "Failed to record vital data. Please check if the patient exists and all values are valid.",
         variant: "destructive",
       });
     } finally {
@@ -321,6 +408,25 @@ export default function VitalDataCollection() {
     const patient = patients.find(p => p.patientId === patientId);
     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
+
+  if (!isTokenValid()) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold mb-2">Authentication Required</h2>
+              <p className="text-muted-foreground mb-4">Please log in to access vital data collection</p>
+              <Button onClick={() => navigate('/auth')}>
+                Go to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -346,7 +452,7 @@ export default function VitalDataCollection() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="patient">Select Patient</Label>
+                <Label htmlFor="patient">Select Patient *</Label>
                 <Select 
                   value={selectedPatient} 
                   onValueChange={setSelectedPatient}
@@ -367,6 +473,11 @@ export default function VitalDataCollection() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Loading patients...
+                  </div>
+                )}
+                {!loading && patients.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No patients found. Please register patients first.
                   </div>
                 )}
               </div>
