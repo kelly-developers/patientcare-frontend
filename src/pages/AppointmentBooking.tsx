@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, User, Stethoscope, AlertCircle, CheckCircle } from "lucide-react";
+import { Calendar, Clock, User, Stethoscope, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Appointment {
@@ -26,23 +26,47 @@ interface Appointment {
   arrivalStatus?: 'pending' | 'arrived' | 'late' | 'no-show';
 }
 
-const doctors = [
+interface Patient {
+  id: string;
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  phone: string;
+  email: string;
+}
+
+interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  available: boolean;
+}
+
+const doctors: Doctor[] = [
   { id: "1", name: "Dr. Sarah Johnson", specialty: "Cardiologist", available: true },
   { id: "2", name: "Dr. Michael Chen", specialty: "Cardiac Surgeon", available: true },
   { id: "3", name: "Dr. Emily Davis", specialty: "Interventional Cardiologist", available: true },
   { id: "4", name: "Dr. James Wilson", specialty: "Cardiothoracic Surgeon", available: false },
 ];
 
+const API_BASE_URL = 'https://patientcarebackend.onrender.com/api';
+
 export default function AppointmentBooking() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     patientId: "",
     doctorId: "",
     date: "",
     time: "",
     type: "",
-    priority: ""
+    priority: "medium",
+    reason: "",
+    notes: ""
   });
   const { toast } = useToast();
 
@@ -51,21 +75,65 @@ export default function AppointmentBooking() {
     loadPatients();
   }, []);
 
-  const loadAppointments = () => {
-    const stored = localStorage.getItem('cardiovascular-appointments');
-    if (stored) {
-      setAppointments(JSON.parse(stored));
+  const loadAppointments = async () => {
+    try {
+      setLoading(true);
+      // For now, we'll use localStorage as the backend might not have appointments endpoint
+      const stored = localStorage.getItem('cardiovascular-appointments');
+      if (stored) {
+        setAppointments(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Error loading appointments:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load appointments",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadPatients = () => {
-    const stored = localStorage.getItem('patients');
-    if (stored) {
-      setPatients(JSON.parse(stored));
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/patients`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setPatients(result.data);
+        } else {
+          throw new Error(result.message || 'Failed to load patients');
+        }
+      } else {
+        throw new Error('Failed to fetch patients');
+      }
+    } catch (error) {
+      console.error('Error loading patients:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load patients from server",
+        variant: "destructive",
+      });
+      
+      // Fallback to localStorage if API fails
+      const stored = localStorage.getItem('patients');
+      if (stored) {
+        setPatients(JSON.parse(stored));
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const selectedPatient = patients.find(p => p.id === formData.patientId);
@@ -80,91 +148,141 @@ export default function AppointmentBooking() {
       return;
     }
 
-    const newAppointment: Appointment = {
-      id: Date.now().toString(),
-      patientId: formData.patientId,
-      patientName: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
-      doctorId: formData.doctorId || 'unassigned',
-      doctorName: selectedDoctor?.name || 'Unassigned',
-      date: formData.date,
-      time: formData.time,
-      type: formData.type as any,
-      status: 'scheduled',
-      reason: '',
-      notes: '',
-      priority: formData.priority as any,
-      createdAt: new Date().toISOString(),
-      arrivalStatus: 'pending'
-    };
+    if (!formData.date || !formData.time) {
+      toast({
+        title: "Error",
+        description: "Please select date and time",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const updatedAppointments = [newAppointment, ...appointments];
-    setAppointments(updatedAppointments);
-    localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
+    setSubmitting(true);
 
-    // Create notification for doctor
-    const notifications = JSON.parse(localStorage.getItem('cardiovascular-notifications') || '[]');
-    const notification = {
-      id: Date.now().toString() + '_notif',
-      type: 'appointment',
-      title: 'New Appointment Scheduled',
-      message: `${newAppointment.patientName} has been scheduled for ${formData.type} on ${formData.date} at ${formData.time}`,
-      doctorId: formData.doctorId,
-      appointmentId: newAppointment.id,
-      priority: formData.priority,
-      read: false,
-      createdAt: new Date().toISOString()
-    };
-    notifications.unshift(notification);
-    localStorage.setItem('cardiovascular-notifications', JSON.stringify(notifications));
+    try {
+      // First, try to save to backend API
+      const appointmentData = {
+        patientId: selectedPatient.patientId,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        doctorId: formData.doctorId || 'unassigned',
+        doctorName: selectedDoctor?.name || 'Unassigned',
+        date: formData.date,
+        time: formData.time,
+        type: formData.type,
+        status: 'scheduled',
+        reason: formData.reason,
+        notes: formData.notes,
+        priority: formData.priority,
+        arrivalStatus: 'pending'
+      };
 
-    // Reset form
-    setFormData({
-      patientId: "",
-      doctorId: "",
-      date: "",
-      time: "",
-      type: "",
-      priority: ""
-    });
+      // For now, we'll use localStorage as the backend might not have appointments endpoint
+      // In a real implementation, you would send this to your backend API
+      const newAppointment: Appointment = {
+        id: Date.now().toString(),
+        ...appointmentData,
+        createdAt: new Date().toISOString(),
+      };
 
-    toast({
-      title: "Success",
-      description: "Appointment scheduled successfully. Doctor has been notified.",
-    });
+      const updatedAppointments = [newAppointment, ...appointments];
+      setAppointments(updatedAppointments);
+      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
+
+      // Create notification for doctor
+      const notifications = JSON.parse(localStorage.getItem('cardiovascular-notifications') || '[]');
+      const notification = {
+        id: Date.now().toString() + '_notif',
+        type: 'appointment',
+        title: 'New Appointment Scheduled',
+        message: `${newAppointment.patientName} has been scheduled for ${formData.type} on ${formData.date} at ${formData.time}`,
+        doctorId: formData.doctorId,
+        appointmentId: newAppointment.id,
+        priority: formData.priority,
+        read: false,
+        createdAt: new Date().toISOString()
+      };
+      notifications.unshift(notification);
+      localStorage.setItem('cardiovascular-notifications', JSON.stringify(notifications));
+
+      // Reset form
+      setFormData({
+        patientId: "",
+        doctorId: "",
+        date: "",
+        time: "",
+        type: "",
+        priority: "medium",
+        reason: "",
+        notes: ""
+      });
+
+      toast({
+        title: "Success",
+        description: "Appointment scheduled successfully. Doctor has been notified.",
+      });
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule appointment",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const updateAppointmentStatus = (appointmentId: string, newStatus: string) => {
-    const updatedAppointments = appointments.map(app => 
-      app.id === appointmentId ? { ...app, status: newStatus as any } : app
-    );
-    setAppointments(updatedAppointments);
-    localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
+    try {
+      // For now, update locally. In real implementation, call backend API
+      const updatedAppointments = appointments.map(app => 
+        app.id === appointmentId ? { ...app, status: newStatus as any } : app
+      );
+      setAppointments(updatedAppointments);
+      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
 
-    toast({
-      title: "Status Updated",
-      description: `Appointment status changed to ${newStatus}`,
-    });
+      toast({
+        title: "Status Updated",
+        description: `Appointment status changed to ${newStatus}`,
+      });
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update appointment status",
+        variant: "destructive",
+      });
+    }
   };
 
-  const updateArrivalStatus = (appointmentId: string, arrivalStatus: 'arrived' | 'late' | 'no-show') => {
-    const updatedAppointments = appointments.map(app => {
-      if (app.id === appointmentId) {
-        // If late, move to end of schedule for that day
-        if (arrivalStatus === 'late') {
-          return { ...app, arrivalStatus, priority: 'low' as any };
+  const updateArrivalStatus = async (appointmentId: string, arrivalStatus: 'arrived' | 'late' | 'no-show') => {
+    try {
+      const updatedAppointments = appointments.map(app => {
+        if (app.id === appointmentId) {
+          // If late, move to end of schedule for that day
+          if (arrivalStatus === 'late') {
+            return { ...app, arrivalStatus, priority: 'low' as any };
+          }
+          return { ...app, arrivalStatus };
         }
-        return { ...app, arrivalStatus };
-      }
-      return app;
-    });
-    
-    setAppointments(updatedAppointments);
-    localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
+        return app;
+      });
+      
+      setAppointments(updatedAppointments);
+      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
 
-    toast({
-      title: arrivalStatus === 'arrived' ? "Patient Arrived" : arrivalStatus === 'late' ? "Marked as Late" : "Marked as No-Show",
-      description: arrivalStatus === 'late' ? "Patient moved to end of schedule" : undefined,
-    });
+      toast({
+        title: arrivalStatus === 'arrived' ? "Patient Arrived" : arrivalStatus === 'late' ? "Marked as Late" : "Marked as No-Show",
+        description: arrivalStatus === 'late' ? "Patient moved to end of schedule" : undefined,
+      });
+    } catch (error) {
+      console.error('Error updating arrival status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update arrival status",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -185,6 +303,14 @@ export default function AppointmentBooking() {
       case 'low': return 'bg-green-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -212,14 +338,18 @@ export default function AppointmentBooking() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="patient">Select Patient</Label>
-                <Select value={formData.patientId} onValueChange={(value) => setFormData({...formData, patientId: value})}>
+                <Select 
+                  value={formData.patientId} 
+                  onValueChange={(value) => setFormData({...formData, patientId: value})}
+                  disabled={loading}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose patient..." />
+                    <SelectValue placeholder={loading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
                       <SelectItem key={patient.id} value={patient.id}>
-                        {patient.first_name} {patient.last_name} - {patient.patient_id}
+                        {patient.firstName} {patient.lastName} - {patient.patientId}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -228,7 +358,10 @@ export default function AppointmentBooking() {
 
               <div className="space-y-2">
                 <Label htmlFor="doctor">Select Doctor (Optional)</Label>
-                <Select value={formData.doctorId} onValueChange={(value) => setFormData({...formData, doctorId: value})}>
+                <Select 
+                  value={formData.doctorId} 
+                  onValueChange={(value) => setFormData({...formData, doctorId: value})}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Choose doctor (optional)..." />
                   </SelectTrigger>
@@ -251,6 +384,7 @@ export default function AppointmentBooking() {
                     value={formData.date}
                     onChange={(e) => setFormData({...formData, date: e.target.value})}
                     required
+                    min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
                 <div className="space-y-2">
@@ -268,7 +402,10 @@ export default function AppointmentBooking() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="type">Appointment Type</Label>
-                  <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
+                  <Select 
+                    value={formData.type} 
+                    onValueChange={(value) => setFormData({...formData, type: value})}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select type..." />
                     </SelectTrigger>
@@ -282,7 +419,10 @@ export default function AppointmentBooking() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="priority">Priority</Label>
-                  <Select value={formData.priority} onValueChange={(value) => setFormData({...formData, priority: value})}>
+                  <Select 
+                    value={formData.priority} 
+                    onValueChange={(value) => setFormData({...formData, priority: value})}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select priority..." />
                     </SelectTrigger>
@@ -296,8 +436,39 @@ export default function AppointmentBooking() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full bg-gradient-medical text-white">
-                Schedule Appointment
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason for Visit</Label>
+                <Textarea
+                  id="reason"
+                  placeholder="Brief description of the reason for appointment..."
+                  value={formData.reason}
+                  onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Additional Notes (Optional)</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Any additional information..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-medical text-white"
+                disabled={submitting || loading}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Scheduling...
+                  </>
+                ) : (
+                  'Schedule Appointment'
+                )}
               </Button>
             </form>
           </CardContent>
@@ -316,7 +487,11 @@ export default function AppointmentBooking() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {appointments.map((appointment) => (
+              {loading ? (
+                <div className="flex justify-center items-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : appointments.map((appointment) => (
                 <div key={appointment.id} className="p-4 bg-background rounded-lg border">
                   <div className="flex items-center justify-between mb-2">
                     <div className="font-medium">{appointment.patientName}</div>
@@ -331,8 +506,11 @@ export default function AppointmentBooking() {
                   </div>
                   <div className="space-y-1 text-sm text-muted-foreground">
                     <div><strong>Doctor:</strong> {appointment.doctorName}</div>
-                    <div><strong>Date & Time:</strong> {appointment.date} at {appointment.time}</div>
+                    <div><strong>Date & Time:</strong> {formatDate(appointment.date)} at {appointment.time}</div>
                     <div><strong>Type:</strong> {appointment.type}</div>
+                    {appointment.reason && (
+                      <div><strong>Reason:</strong> {appointment.reason}</div>
+                    )}
                     {appointment.arrivalStatus && appointment.arrivalStatus !== 'pending' && (
                       <div>
                         <strong>Arrival Status:</strong> 
@@ -382,7 +560,7 @@ export default function AppointmentBooking() {
                   )}
                 </div>
               ))}
-              {appointments.length === 0 && (
+              {appointments.length === 0 && !loading && (
                 <div className="text-center text-muted-foreground py-8">
                   No appointments scheduled yet
                 </div>
