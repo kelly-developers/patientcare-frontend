@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiClient, getToken } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Patient {
   id: string;
@@ -34,6 +34,8 @@ interface VitalData {
   respiratoryRate?: number;
   painLevel?: number;
   notes?: string;
+  bmi?: number;
+  bloodPressure?: string;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   recordedAt: string;
   recordedByName: string;
@@ -59,6 +61,7 @@ export default function VitalDataCollection() {
     notes: ""
   });
   const { toast } = useToast();
+  const { getToken } = useAuth();
 
   useEffect(() => {
     loadPatients();
@@ -69,29 +72,34 @@ export default function VitalDataCollection() {
     try {
       setLoading(true);
       const token = getToken();
-      const response = await apiClient.get('/api/patients', {
+      const response = await fetch('https://patientcarebackend.onrender.com/api/patients', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
       
-      if (response.data.success) {
-        const patientsData = response.data.data.map((patient: any) => ({
-          id: patient.id,
-          patientId: patient.patientId,
-          firstName: patient.firstName,
-          lastName: patient.lastName,
-          dateOfBirth: patient.dateOfBirth,
-          gender: patient.gender
-        }));
-        setPatients(patientsData);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const patientsData = result.data.map((patient: any) => ({
+            id: patient.id,
+            patientId: patient.patientId,
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            dateOfBirth: patient.dateOfBirth,
+            gender: patient.gender
+          }));
+          setPatients(patientsData);
+        }
+      } else {
+        throw new Error('Failed to load patients');
       }
     } catch (error: any) {
       console.error('Error loading patients:', error);
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to load patients",
+        description: error.message || "Failed to load patients",
         variant: "destructive",
       });
     } finally {
@@ -102,15 +110,23 @@ export default function VitalDataCollection() {
   const loadVitals = async () => {
     try {
       const token = getToken();
-      const response = await apiClient.get('/api/vital-data/recorded-by-me', {
+      const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data/recorded-by-me', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
       
-      if (response.data.success) {
-        setVitals(response.data.data);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Add risk level to each vital record
+          const vitalsWithRisk = result.data.map((vital: any) => ({
+            ...vital,
+            riskLevel: calculateRiskLevel(vital)
+          }));
+          setVitals(vitalsWithRisk);
+        }
       }
     } catch (error: any) {
       console.error('Error loading vital data:', error);
@@ -119,10 +135,10 @@ export default function VitalDataCollection() {
   };
 
   const calculateRiskLevel = (vitals: any): 'low' | 'medium' | 'high' | 'critical' => {
-    const systolic = parseInt(vitals.systolicBP || vitals.bloodPressureSystolic);
-    const diastolic = parseInt(vitals.diastolicBP || vitals.bloodPressureDiastolic);
-    const heartRate = parseInt(vitals.heartRate);
-    const oxygenSat = parseInt(vitals.oxygenSaturation);
+    const systolic = vitals.systolicBP;
+    const diastolic = vitals.diastolicBP;
+    const heartRate = vitals.heartRate;
+    const oxygenSat = vitals.oxygenSaturation;
 
     // Critical conditions
     if (systolic > 180 || diastolic > 120 || heartRate > 120 || heartRate < 50 || oxygenSat < 90) {
@@ -151,12 +167,12 @@ export default function VitalDataCollection() {
       return;
     }
 
-    // Find selected patient data
-    const selectedPatientData = patients.find(p => p.patientId === selectedPatient);
-    if (!selectedPatientData) {
+    // Validate required fields
+    if (!formData.systolicBP || !formData.diastolicBP || !formData.heartRate || 
+        !formData.temperature || !formData.oxygenSaturation || !formData.weight || !formData.height) {
       toast({
         title: "Error",
-        description: "Selected patient not found",
+        description: "Please fill in all required vital signs",
         variant: "destructive",
       });
       return;
@@ -181,54 +197,62 @@ export default function VitalDataCollection() {
       };
 
       const token = getToken();
-      const response = await apiClient.post('/api/vital-data', vitalDataRequest, {
+      const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data', {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify(vitalDataRequest)
       });
 
-      if (response.data.success) {
-        const newVital = response.data.data;
-        const riskLevel = calculateRiskLevel(newVital);
-        
-        // Add risk level to the vital data for display
-        const vitalWithRisk = {
-          ...newVital,
-          riskLevel
-        };
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const newVital = result.data;
+          const riskLevel = calculateRiskLevel(newVital);
+          
+          // Add risk level to the vital data for display
+          const vitalWithRisk = {
+            ...newVital,
+            riskLevel
+          };
 
-        setVitals(prev => [vitalWithRisk, ...prev]);
-        
-        // Reset form
-        setFormData({
-          systolicBP: "",
-          diastolicBP: "",
-          heartRate: "",
-          respiratoryRate: "",
-          temperature: "",
-          weight: "",
-          height: "",
-          oxygenSaturation: "",
-          bloodGlucose: "",
-          painLevel: "",
-          notes: ""
-        });
-        setSelectedPatient("");
+          setVitals(prev => [vitalWithRisk, ...prev]);
+          
+          // Reset form
+          setFormData({
+            systolicBP: "",
+            diastolicBP: "",
+            heartRate: "",
+            respiratoryRate: "",
+            temperature: "",
+            weight: "",
+            height: "",
+            oxygenSaturation: "",
+            bloodGlucose: "",
+            painLevel: "",
+            notes: ""
+          });
+          setSelectedPatient("");
 
-        toast({
-          title: "Success",
-          description: `Vital data recorded successfully. Risk level: ${riskLevel.toUpperCase()}`,
-        });
+          toast({
+            title: "Success",
+            description: `Vital data recorded successfully. Risk level: ${riskLevel.toUpperCase()}`,
+          });
 
-        // Reload vitals to ensure we have the latest data
-        loadVitals();
+          // Reload vitals to ensure we have the latest data
+          loadVitals();
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to record vital data');
       }
     } catch (error: any) {
       console.error('Error recording vital data:', error);
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to record vital data",
+        description: error.message || "Failed to record vital data",
         variant: "destructive",
       });
     } finally {
@@ -302,7 +326,7 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="systolic">Blood Pressure (Systolic)</Label>
+                  <Label htmlFor="systolic">Blood Pressure (Systolic) *</Label>
                   <Input
                     id="systolic"
                     type="number"
@@ -316,7 +340,7 @@ export default function VitalDataCollection() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="diastolic">Blood Pressure (Diastolic)</Label>
+                  <Label htmlFor="diastolic">Blood Pressure (Diastolic) *</Label>
                   <Input
                     id="diastolic"
                     type="number"
@@ -333,7 +357,7 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="heartRate">Heart Rate (BPM)</Label>
+                  <Label htmlFor="heartRate">Heart Rate (BPM) *</Label>
                   <Input
                     id="heartRate"
                     type="number"
@@ -363,7 +387,7 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="temperature">Temperature (°C)</Label>
+                  <Label htmlFor="temperature">Temperature (°C) *</Label>
                   <Input
                     id="temperature"
                     type="number"
@@ -378,7 +402,7 @@ export default function VitalDataCollection() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oxygenSat">O2 Saturation (%)</Label>
+                  <Label htmlFor="oxygenSat">O2 Saturation (%) *</Label>
                   <Input
                     id="oxygenSat"
                     type="number"
@@ -395,7 +419,7 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="weight">Weight (kg)</Label>
+                  <Label htmlFor="weight">Weight (kg) *</Label>
                   <Input
                     id="weight"
                     type="number"
@@ -410,7 +434,7 @@ export default function VitalDataCollection() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="height">Height (cm)</Label>
+                  <Label htmlFor="height">Height (cm) *</Label>
                   <Input
                     id="height"
                     type="number"
@@ -506,13 +530,14 @@ export default function VitalDataCollection() {
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                    <div>BP: {vital.systolicBP || vital.bloodPressureSystolic}/{vital.diastolicBP || vital.bloodPressureDiastolic}</div>
+                    <div>BP: {vital.systolicBP}/{vital.diastolicBP}</div>
                     <div>HR: {vital.heartRate} BPM</div>
                     <div>Temp: {vital.temperature}°C</div>
                     <div>O2: {vital.oxygenSaturation}%</div>
                     {vital.respiratoryRate && <div>RR: {vital.respiratoryRate}</div>}
                     {vital.bloodGlucose && <div>Glucose: {vital.bloodGlucose} mg/dL</div>}
                     {vital.painLevel !== undefined && <div>Pain: {vital.painLevel}/10</div>}
+                    {vital.bmi && <div>BMI: {vital.bmi.toFixed(1)}</div>}
                   </div>
                   {vital.notes && (
                     <div className="mt-2 text-sm text-muted-foreground">
@@ -520,7 +545,7 @@ export default function VitalDataCollection() {
                     </div>
                   )}
                   <div className="mt-2 text-xs text-muted-foreground">
-                    {new Date(vital.recordedAt || vital.timestamp).toLocaleString()}
+                    {new Date(vital.recordedAt).toLocaleString()}
                   </div>
                 </div>
               ))}
