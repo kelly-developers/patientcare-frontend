@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // API Configuration
-export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
+export const API_BASE_URL = 'https://patientcarebackend.onrender.com/api';
 
 // API endpoints matching Spring Boot backend
 export const API_ENDPOINTS = {
