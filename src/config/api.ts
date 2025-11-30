@@ -1,16 +1,16 @@
 import axios from 'axios';
 
 // API Configuration
-export const API_BASE_URL = 'https://patientcarebackend.onrender.com/api';
+export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 
 // API endpoints matching Spring Boot backend
 export const API_ENDPOINTS = {
   AUTH: {
-    SIGNIN: '/auth/signin',
-    SIGNUP: '/auth/signup',
-    ME: '/auth/me',
-    LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
+    SIGNIN: '/api/auth/signin',
+    SIGNUP: '/api/auth/signup',
+    ME: '/api/auth/me',
+    LOGOUT: '/api/auth/logout',
+    REFRESH: '/api/auth/refresh',
   },
   PATIENTS: {
     BASE: '/api/patients',
