@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { apiClient, API_ENDPOINTS, refreshAuthToken } from '@/lib/api';
+import { apiClient, API_ENDPOINTS } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
-import { patientsService } from '@/services/patientsService';
+import { patientsService, Patient } from '@/services/patientsService';
+
+export type { Patient };
 
 export const usePatients = () => {
   const [patients, setPatients] = useState([]);

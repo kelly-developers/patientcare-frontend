@@ -196,11 +196,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('✅ Login response:', response);
       
-      if (response.success && response.data) {
-        const { token, refreshToken, user } = response.data;
-        
+      // Handle both response formats: response.data.token or response.token
+      const token = response.data?.token || response.token;
+      const refreshTokenValue = response.data?.refreshToken || response.refreshToken;
+      const userData = response.data?.user || response.user;
+      
+      if (token) {
         setToken(token);
-        setRefreshToken(refreshToken);
+        if (refreshTokenValue) {
+          setRefreshToken(refreshTokenValue);
+        }
+        if (userData) {
+          setUser(userData);
+          setCurrentUser(userData);
+        }
+        
+        setIsAuthenticated(true);
+        
+        toast({
+          title: "Success",
+          description: `Welcome back${userData?.firstName ? `, ${userData.firstName}` : ''}!`,
+        });
+        
+        return { success: true };
+      } else if (response.success && response.data) {
+        const { token: dataToken, refreshToken: dataRefreshToken, user } = response.data;
+        
+        setToken(dataToken);
+        setRefreshToken(dataRefreshToken);
         setUser(user);
         
         setIsAuthenticated(true);

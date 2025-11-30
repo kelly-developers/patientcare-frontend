@@ -157,15 +157,22 @@ export const patientsService = {
     }
   },
 
-  async updateConsent(id: string, consent: boolean): Promise<Patient | null> {
+  async getResearchConsent(): Promise<Patient[]> {
     try {
-      const response = await apiClient.patch(
-        API_ENDPOINTS.PATIENTS.CONSENT(id),
-        { consent }
-      );
-      return response.data?.data || response.data;
+      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.RESEARCH_CONSENT);
+      return response.data?.data || response.data || [];
     } catch (error) {
-      console.error('Error updating consent:', error);
+      console.error('Error fetching research consent patients:', error);
+      throw error;
+    }
+  },
+
+  async getCount(): Promise<number> {
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.COUNT);
+      return response.data?.data || response.data || 0;
+    } catch (error) {
+      console.error('Error fetching patient count:', error);
       throw error;
     }
   },

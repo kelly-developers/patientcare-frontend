@@ -3,56 +3,151 @@ import axios from 'axios';
 // API Configuration
 export const API_BASE_URL = 'https://patientcarebackend.onrender.com';
 
-// API endpoints
+// API endpoints matching Spring Boot backend
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: '/auth/login',
+    SIGNIN: '/auth/signin',
     SIGNUP: '/auth/signup',
+    ME: '/auth/me',
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/refresh',
-    VERIFY: '/auth/verify',
-  },
-  HEALTH: {
-    BASE: '/health',
-    DETAILED: '/health/detailed',
-    PING: '/health/ping'
   },
   PATIENTS: {
     BASE: '/api/patients',
     BY_ID: (id: string) => `/api/patients/${id}`,
+    BY_PATIENT_ID: (patientId: string) => `/api/patients/patient-id/${patientId}`,
     SEARCH: '/api/patients/search',
-    CONSENT: (id: string) => `/api/patients/${id}/consent`,
-    EXPORT_EXCEL: '/api/patients/export/excel',
-    EXPORT_PDF: '/api/patients/export/pdf',
-  },
-  PROCEDURES: {
-    BASE: '/api/procedures',
-    BY_ID: (id: string) => `/api/procedures/${id}`,
-    BY_PATIENT: (patientId: string) => `/api/procedures/patient/${patientId}`,
-    STATUS: '/api/procedures/status',
+    RESEARCH_CONSENT: '/api/patients/research-consent',
+    COUNT: '/api/patients/count',
   },
   APPOINTMENTS: {
     BASE: '/api/appointments',
     BY_ID: (id: string) => `/api/appointments/${id}`,
     BY_PATIENT: (patientId: string) => `/api/appointments/patient/${patientId}`,
+    BY_DOCTOR: (doctorId: string) => `/api/appointments/doctor/${doctorId}`,
+    BY_DATE: (date: string) => `/api/appointments/date/${date}`,
+    UPCOMING: (patientId: string) => `/api/appointments/patient/${patientId}/upcoming`,
+    UPDATE_STATUS: (id: string) => `/api/appointments/${id}/status`,
+    UPDATE_ARRIVAL: (id: string) => `/api/appointments/${id}/arrival`,
+  },
+  SURGERIES: {
+    BASE: '/api/surgeries',
+    BY_ID: (id: string) => `/api/surgeries/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/surgeries/patient/${patientId}`,
+    BY_STATUS: (status: string) => `/api/surgeries/status/${status}`,
+    BY_SURGEON: (surgeonName: string) => `/api/surgeries/surgeon/${surgeonName}`,
+    PENDING_CONSENT: '/api/surgeries/pending-consent',
+    DATE_RANGE: '/api/surgeries/date-range',
+    UPDATE_STATUS: (id: string) => `/api/surgeries/${id}/status`,
+  },
+  CONSENT: {
+    BASE: '/api/consent',
+    BY_SURGERY: (surgeryId: string) => `/api/consent/surgery/${surgeryId}`,
+    UPLOAD: (consentId: string) => `/api/consent/upload/${consentId}`,
+    STORED: '/api/consent/stored',
+    HAS_VALID: (surgeryId: string) => `/api/consent/surgery/${surgeryId}/has-valid`,
+    BY_DECISION: (decision: string) => `/api/consent/decision/${decision}`,
+  },
+  PREOPERATIVE: {
+    BASE: '/api/preoperative',
+    BY_ID: (id: string) => `/api/preoperative/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/preoperative/patient/${patientId}`,
+    IS_COMPLETE: (patientId: string) => `/api/preoperative/patient/${patientId}/complete`,
+  },
+  DURING_OPERATION: {
+    BASE: '/api/during-operation',
+    BY_ID: (id: string) => `/api/during-operation/${id}`,
+    BY_SURGERY: (surgeryId: string) => `/api/during-operation/surgery/${surgeryId}`,
+    BY_STATUS: (status: string) => `/api/during-operation/status/${status}`,
+    ACTIVE: '/api/during-operation/active',
+    RECENT_BY_PATIENT: (patientId: string) => `/api/during-operation/patient/${patientId}/recent`,
+    COMPLETE: (id: string) => `/api/during-operation/${id}/complete`,
+    VITALS: (id: string) => `/api/during-operation/${id}/vitals`,
+    NOTES: (id: string) => `/api/during-operation/${id}/notes`,
+    COMPLICATIONS: (id: string) => `/api/during-operation/${id}/complications`,
+  },
+  POSTOPERATIVE: {
+    BASE: '/api/postoperative',
+    BY_ID: (id: string) => `/api/postoperative/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/postoperative/patient/${patientId}`,
+    BY_SURGERY: (surgeryId: string) => `/api/postoperative/surgery/${surgeryId}`,
+    BY_TYPE: (followupType: string) => `/api/postoperative/type/${followupType}`,
+    NON_ADHERENT: '/api/postoperative/non-adherent',
+    OVERDUE: '/api/postoperative/overdue',
+  },
+  SURGICAL_DECISIONS: {
+    BASE: '/api/surgical-decisions',
+    BY_ID: (id: string) => `/api/surgical-decisions/${id}`,
+    BY_SURGERY: (surgeryId: string) => `/api/surgical-decisions/surgery/${surgeryId}`,
+    CONSENSUS: (surgeryId: string) => `/api/surgical-decisions/consensus/${surgeryId}`,
+    BY_SURGEON: (surgeonName: string) => `/api/surgical-decisions/surgeon/${surgeonName}`,
+    HAS_CONSENSUS: (surgeryId: string) => `/api/surgical-decisions/${surgeryId}/has-consensus`,
   },
   ANALYSIS: {
     BASE: '/api/analysis',
     BY_ID: (id: string) => `/api/analysis/${id}`,
     BY_PATIENT: (patientId: string) => `/api/analysis/patient/${patientId}`,
+    BY_DOCTOR: (doctorId: string) => `/api/analysis/doctor/${doctorId}`,
+    SURGERY_RECOMMENDED: '/api/analysis/surgery-recommended',
+  },
+  LAB_TESTS: {
+    BASE: '/api/lab-tests',
+    BY_ID: (id: string) => `/api/lab-tests/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/lab-tests/patient/${patientId}`,
+    BY_STATUS: (status: string) => `/api/lab-tests/status/${status}`,
+    BY_TYPE: (testType: string) => `/api/lab-tests/type/${testType}`,
+    URGENT: '/api/lab-tests/urgent',
+    DATE_RANGE: '/api/lab-tests/date-range',
+    UPDATE_STATUS: (id: string) => `/api/lab-tests/${id}/status`,
   },
   PRESCRIPTIONS: {
     BASE: '/api/prescriptions',
     BY_ID: (id: string) => `/api/prescriptions/${id}`,
     BY_PATIENT: (patientId: string) => `/api/prescriptions/patient/${patientId}`,
+    BY_DOCTOR: (doctorId: string) => `/api/prescriptions/doctor/${doctorId}`,
+    PENDING: '/api/prescriptions/pending',
+    ACTIVE: (patientId: string) => `/api/prescriptions/patient/${patientId}/active`,
+    SEARCH: '/api/prescriptions/search',
+    UPDATE_STATUS: (id: string) => `/api/prescriptions/${id}/status`,
+  },
+  ICU: {
+    BASE: '/api/icu',
+    BY_ID: (id: string) => `/api/icu/${id}`,
+    BY_PATIENT: (patientId: string) => `/api/icu/patient/${patientId}`,
+    LATEST: (patientId: string) => `/api/icu/patient/${patientId}/latest`,
+    CRITICAL: '/api/icu/critical',
+    TIME_RANGE: (patientId: string) => `/api/icu/patient/${patientId}/time-range`,
+    STATS: (patientId: string) => `/api/icu/patient/${patientId}/stats`,
+    VITALS: (id: string) => `/api/icu/${id}/vitals`,
+    MEDICATIONS: (id: string) => `/api/icu/${id}/medications`,
   },
   VITAL_DATA: {
     BASE: '/api/vital-data',
     BY_ID: (id: string) => `/api/vital-data/${id}`,
     BY_PATIENT: (patientId: string) => `/api/vital-data/patient/${patientId}`,
+    RECORDED_BY_ME: '/api/vital-data/recorded-by-me',
+    CRITICAL: '/api/vital-data/critical',
+    RECENT: (patientId: string, hours: number) => `/api/vital-data/patient/${patientId}/recent?hours=${hours}`,
+    LATEST: (patientId: string, limit: number) => `/api/vital-data/patient/${patientId}/latest?limit=${limit}`,
   },
-  USERS: {
-    PROFILE: '/api/users/profile',
+  NOTIFICATIONS: {
+    BASE: '/api/notifications',
+    BY_ID: (id: string) => `/api/notifications/${id}`,
+    BY_USER: (userId: string) => `/api/notifications/user/${userId}`,
+    UNREAD: '/api/notifications/unread',
+    READ: (id: string) => `/api/notifications/${id}/read`,
+    READ_ALL: '/api/notifications/read-all',
+    DUE: '/api/notifications/due',
+    RECENT: '/api/notifications/recent',
+    UNREAD_COUNT: (userId: string) => `/api/notifications/user/${userId}/unread-count`,
+    EMERGENCY: '/api/notifications/emergency',
+  },
+  EXPORT: {
+    PATIENTS: '/api/export/patients',
+    SURGERIES: '/api/export/surgeries',
+    APPOINTMENTS: '/api/export/appointments',
+    LAB_TESTS: '/api/export/lab-tests',
+    PRESCRIPTIONS: '/api/export/prescriptions',
   },
 };
 
@@ -451,10 +546,10 @@ export const testMultipleEndpoints = async () => {
 export const loginUser = async (credentials: any) => {
   try {
     console.log('🔐 Attempting login...');
-    const response = await authClient.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
+    const response = await authClient.post(API_ENDPOINTS.AUTH.SIGNIN, credentials);
     
-    if (response.data.accessToken) {
-      setToken(response.data.accessToken);
+    if (response.data.accessToken || response.data.token) {
+      setToken(response.data.accessToken || response.data.token);
       setRefreshToken(response.data.refreshToken);
       setUser(response.data.user);
       console.log('✅ Login successful');
@@ -484,13 +579,13 @@ export const logoutUser = async (): Promise<void> => {
   }
 };
 
-// Verify token function
+// Verify token function - uses /auth/me endpoint
 export const verifyToken = async (): Promise<boolean> => {
   try {
     const token = getToken();
     if (!token) return false;
     
-    const response = await apiClient.get(API_ENDPOINTS.AUTH.VERIFY);
+    const response = await apiClient.get(API_ENDPOINTS.AUTH.ME);
     return response.status === 200;
   } catch (error) {
     console.error('Token verification failed:', error);

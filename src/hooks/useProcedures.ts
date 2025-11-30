@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { proceduresService, SurgicalProcedure, CreateProcedureRequest } from '@/services/proceduresService';
+import { proceduresService, Surgery, CreateSurgeryRequest } from '@/services/proceduresService';
 
-export type { SurgicalProcedure };
+export type { Surgery as SurgicalProcedure };
 
 export function useProcedures() {
-  const [procedures, setProcedures] = useState<SurgicalProcedure[]>([]);
+  const [procedures, setProcedures] = useState<Surgery[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -26,7 +26,7 @@ export function useProcedures() {
     }
   };
 
-  const addProcedure = async (procedureData: CreateProcedureRequest) => {
+  const addProcedure = async (procedureData: CreateSurgeryRequest) => {
     try {
       const newProcedure = await proceduresService.create(procedureData);
       setProcedures(prev => [newProcedure, ...prev]);
@@ -47,7 +47,7 @@ export function useProcedures() {
     }
   };
 
-  const updateProcedure = async (id: string, procedureData: Partial<SurgicalProcedure>) => {
+  const updateProcedure = async (id: string, procedureData: Partial<Surgery>) => {
     try {
       const updatedProcedure = await proceduresService.update(id, procedureData);
       setProcedures(prev => prev.map(p => p.id === id ? updatedProcedure : p));

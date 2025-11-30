@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, Edit, Trash2, UserCheck, Phone, Mail, Calendar } from 'lucide-react';
-import { Patient, usePatients } from '@/hooks/usePatients';
+import { usePatients, Patient } from '@/hooks/usePatients';
 import PatientForm from './PatientForm';
 import { format } from 'date-fns';
 
@@ -182,14 +182,6 @@ export default function PatientList() {
         )}
       </CardContent>
 
-      {editingPatient && (
-        <PatientForm
-          onSubmit={handleUpdate}
-          initialData={editingPatient}
-          isEdit={true}
-          trigger={<div />} // Hidden trigger since we control open state
-        />
-      )}
     </Card>
   );
 }

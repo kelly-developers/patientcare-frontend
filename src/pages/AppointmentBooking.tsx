@@ -17,13 +17,13 @@ interface Appointment {
   doctorName: string;
   date: string;
   time: string;
-  type: 'consultation' | 'follow-up' | 'emergency' | 'surgery';
-  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+  type: string;
+  status: string;
   reason: string;
   notes?: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  priority: string;
   createdAt: string;
-  arrivalStatus?: 'pending' | 'arrived' | 'late' | 'no-show';
+  arrivalStatus?: string;
 }
 
 interface Patient {

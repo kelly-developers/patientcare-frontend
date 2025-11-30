@@ -14,7 +14,7 @@ export default function RecordsManagement() {
   const { procedures } = useProcedures();
 
   const activePatients = patients.filter(p => 
-    procedures.some(proc => proc.patient_id === p.id && proc.status !== 'completed')
+    procedures.some(proc => proc.patientId === p.id && proc.status !== 'completed')
   ).length;
 
   const completedProcedures = procedures.filter(p => p.status === 'completed').length;

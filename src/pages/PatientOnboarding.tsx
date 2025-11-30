@@ -43,8 +43,7 @@ const hasResearchConsent = (patient: Patient) => {
 
 const hasSampleStorage = (patient: Patient) => {
   return patient?.sampleStorageConsent === true || 
-         patient?.sample_storage?.storeSamples === true ||
-         patient?.sample_storage_consent === true;
+         patient?.sample_storage?.storeSamples === true;
 };
 
 const formatPatientDate = (dateString: any) => {
@@ -71,7 +70,7 @@ const getCreatedAt = (patient: Patient) => {
 };
 
 const getPatientStatus = (patient: Patient) => {
-  return patient?.status || 'active';
+  return (patient as any)?.status || 'active';
 };
 
 // PatientCard component moved outside and uses the helper functions

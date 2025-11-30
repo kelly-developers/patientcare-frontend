@@ -1,79 +1,88 @@
 import { apiClient, API_ENDPOINTS } from '@/config/api';
 
-export interface SurgicalProcedure {
+export interface Surgery {
   id: string;
-  patient_id: string;
-  procedure_name: string;
-  procedure_type?: string;
-  scheduled_date?: string;
-  actual_date?: string;
-  duration_minutes?: number;
-  surgeon_name?: string;
-  assistant_surgeon?: string;
-  anesthesia_type?: string;
-  pre_operative_notes?: string;
-  operative_notes?: string;
-  post_operative_notes?: string;
-  complications?: string;
+  patientId: string;
+  surgeryType: string;
+  scheduledDate: string;
+  surgeon: string;
+  assistantSurgeon?: string;
+  anesthesiologist?: string;
   status: string;
-  created_at: string;
-  updated_at: string;
-  patient?: {
-    first_name: string;
-    last_name: string;
-    patient_id: string;
-  };
+  priority?: string;
+  preOpNotes?: string;
+  postOpNotes?: string;
+  complications?: string;
+  duration?: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface CreateProcedureRequest {
-  patient_id: string;
-  procedure_name: string;
-  procedure_type?: string;
-  scheduled_date?: string;
-  actual_date?: string;
-  duration_minutes?: number;
-  surgeon_name?: string;
-  assistant_surgeon?: string;
-  anesthesia_type?: string;
-  pre_operative_notes?: string;
-  operative_notes?: string;
-  post_operative_notes?: string;
-  complications?: string;
-  status: string;
+export interface CreateSurgeryRequest {
+  patientId: string;
+  surgeryType: string;
+  scheduledDate: string;
+  surgeon: string;
+  assistantSurgeon?: string;
+  anesthesiologist?: string;
+  status?: string;
+  priority?: string;
+  preOpNotes?: string;
 }
 
 export const proceduresService = {
-  async getAll(): Promise<SurgicalProcedure[]> {
-    const response = await apiClient.get<SurgicalProcedure[]>(API_ENDPOINTS.PROCEDURES.BASE);
+  async getAll(): Promise<Surgery[]> {
+    const response = await apiClient.get<Surgery[]>(API_ENDPOINTS.SURGERIES.BASE);
     return response.data;
   },
 
-  async getById(id: string): Promise<SurgicalProcedure> {
-    const response = await apiClient.get<SurgicalProcedure>(API_ENDPOINTS.PROCEDURES.BY_ID(id));
+  async getById(id: string): Promise<Surgery> {
+    const response = await apiClient.get<Surgery>(API_ENDPOINTS.SURGERIES.BY_ID(id));
     return response.data;
   },
 
-  async getByPatient(patientId: string): Promise<SurgicalProcedure[]> {
-    const response = await apiClient.get<SurgicalProcedure[]>(
-      API_ENDPOINTS.PROCEDURES.BY_PATIENT(patientId)
+  async getByPatient(patientId: string): Promise<Surgery[]> {
+    const response = await apiClient.get<Surgery[]>(
+      API_ENDPOINTS.SURGERIES.BY_PATIENT(patientId)
     );
     return response.data;
   },
 
-  async create(data: CreateProcedureRequest): Promise<SurgicalProcedure> {
-    const response = await apiClient.post<SurgicalProcedure>(API_ENDPOINTS.PROCEDURES.BASE, data);
+  async create(data: CreateSurgeryRequest): Promise<Surgery> {
+    const response = await apiClient.post<Surgery>(API_ENDPOINTS.SURGERIES.BASE, data);
     return response.data;
   },
 
-  async update(id: string, data: Partial<SurgicalProcedure>): Promise<SurgicalProcedure> {
-    const response = await apiClient.put<SurgicalProcedure>(
-      API_ENDPOINTS.PROCEDURES.BY_ID(id),
+  async update(id: string, data: Partial<Surgery>): Promise<Surgery> {
+    const response = await apiClient.put<Surgery>(
+      API_ENDPOINTS.SURGERIES.BY_ID(id),
       data
     );
     return response.data;
   },
 
   async delete(id: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.PROCEDURES.BY_ID(id));
+    await apiClient.delete(API_ENDPOINTS.SURGERIES.BY_ID(id));
+  },
+
+  async updateStatus(id: string, status: string): Promise<Surgery> {
+    const response = await apiClient.put<Surgery>(
+      `${API_ENDPOINTS.SURGERIES.UPDATE_STATUS(id)}?status=${status}`
+    );
+    return response.data;
+  },
+
+  async getByStatus(status: string): Promise<Surgery[]> {
+    const response = await apiClient.get<Surgery[]>(
+      API_ENDPOINTS.SURGERIES.BY_STATUS(status)
+    );
+    return response.data;
+  },
+
+  async getPendingConsent(): Promise<Surgery[]> {
+    const response = await apiClient.get<Surgery[]>(
+      API_ENDPOINTS.SURGERIES.PENDING_CONSENT
+    );
+    return response.data;
   },
 };
