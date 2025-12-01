@@ -23,19 +23,8 @@ export interface Patient {
   allergies?: string;
   currentMedications?: string;
   current_medications?: string;
-  researchConsent?: boolean;
-  research_consent?: any;
-  researchConsentDate?: string;
-  research_consent_date?: string;
-  futureContactConsent?: boolean;
-  anonymizedDataConsent?: boolean;
-  sampleStorageConsent?: boolean;
-  sample_storage?: any;
-  sampleTypes?: string;
-  storageDuration?: string;
-  futureResearchUseConsent?: boolean;
-  destructionConsent?: boolean;
-  consentData?: any;
+  consentAccepted?: boolean;
+  consentFormPath?: string;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;
@@ -55,29 +44,18 @@ export interface CreatePatientRequest {
   medicalHistory?: string;
   allergies?: string;
   currentMedications?: string;
-  researchConsent?: boolean;
-  researchConsentDate?: string | null;
-  futureContactConsent?: boolean;
-  anonymizedDataConsent?: boolean;
-  sampleStorageConsent?: boolean;
-  sampleTypes?: string;
-  storageDuration?: string;
-  futureResearchUseConsent?: boolean;
-  destructionConsent?: boolean;
-  consentData?: any;
+  consentAccepted: boolean;
+  consentFormPath?: string;
 }
 
 export const patientsService = {
   async getAll(): Promise<Patient[]> {
     try {
       const response = await apiClient.get(API_ENDPOINTS.PATIENTS.BASE);
-      // Handle both direct array response and ApiResponse wrapper
       if (response.data && Array.isArray(response.data)) {
         return response.data;
       } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
         return response.data.data;
-      } else if (response.data && response.data.success) {
-        return response.data.data || [];
       }
       return [];
     } catch (error) {
@@ -100,9 +78,13 @@ export const patientsService = {
     try {
       console.log('📝 Creating patient with data:', data);
       
-      // Ensure required fields are present
+      // Validate required fields
       if (!data.firstName || !data.lastName || !data.dateOfBirth || !data.gender) {
         throw new Error('Missing required fields: firstName, lastName, dateOfBirth, gender');
+      }
+
+      if (!data.consentAccepted) {
+        throw new Error('Consent must be accepted to register patient');
       }
 
       const response = await apiClient.post(API_ENDPOINTS.PATIENTS.BASE, data);
@@ -117,22 +99,24 @@ export const patientsService = {
     }
   },
 
-  async update(id: string, data: Partial<Patient>): Promise<Patient | null> {
+  async uploadConsentForm(patientId: string, file: File): Promise<Patient | null> {
     try {
-      const response = await apiClient.put(API_ENDPOINTS.PATIENTS.BY_ID(id), data);
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await apiClient.post(
+        `/api/consent/upload/${patientId}`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+      
       return response.data?.data || response.data;
     } catch (error) {
-      console.error('Error updating patient:', error);
-      throw error;
-    }
-  },
-
-  async delete(id: string): Promise<boolean> {
-    try {
-      await apiClient.delete(API_ENDPOINTS.PATIENTS.BY_ID(id));
-      return true;
-    } catch (error) {
-      console.error('Error deleting patient:', error);
+      console.error('Error uploading consent form:', error);
       throw error;
     }
   },
@@ -142,37 +126,14 @@ export const patientsService = {
       const response = await apiClient.get(API_ENDPOINTS.PATIENTS.SEARCH, {
         params: { q: query },
       });
-      // Handle both direct array response and ApiResponse wrapper
       if (response.data && Array.isArray(response.data)) {
         return response.data;
       } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
         return response.data.data;
-      } else if (response.data && response.data.success) {
-        return response.data.data || [];
       }
       return [];
     } catch (error) {
       console.error('Error searching patients:', error);
-      throw error;
-    }
-  },
-
-  async getResearchConsent(): Promise<Patient[]> {
-    try {
-      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.RESEARCH_CONSENT);
-      return response.data?.data || response.data || [];
-    } catch (error) {
-      console.error('Error fetching research consent patients:', error);
-      throw error;
-    }
-  },
-
-  async getCount(): Promise<number> {
-    try {
-      const response = await apiClient.get(API_ENDPOINTS.PATIENTS.COUNT);
-      return response.data?.data || response.data || 0;
-    } catch (error) {
-      console.error('Error fetching patient count:', error);
       throw error;
     }
   },

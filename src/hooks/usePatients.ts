@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient, API_ENDPOINTS } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
-import { patientsService, Patient } from '@/services/patientsService';
+import { patientsService, Patient, CreatePatientRequest } from '@/services/patientsService';
 
 export type { Patient };
 
@@ -11,7 +11,6 @@ export const usePatients = () => {
   const [error, setError] = useState(null);
   const { toast } = useToast();
 
-  // Load patients on component mount
   useEffect(() => {
     loadPatients();
   }, []);
@@ -38,19 +37,23 @@ export const usePatients = () => {
     }
   };
 
-  const addPatient = async (patientData) => {
+  const addPatient = async (patientData: CreatePatientRequest) => {
     try {
       setLoading(true);
       setError(null);
       
       console.log('📝 Creating patient:', patientData);
       
-      // Enhanced validation before sending
+      // Enhanced validation
       if (!patientData.firstName || !patientData.lastName || !patientData.dateOfBirth || !patientData.gender) {
         throw new Error('Missing required fields: firstName, lastName, dateOfBirth, gender');
       }
 
-      // Validate date is not in future (double check)
+      if (!patientData.consentAccepted) {
+        throw new Error('Consent must be accepted to register patient');
+      }
+
+      // Validate date
       const dob = new Date(patientData.dateOfBirth);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -59,39 +62,13 @@ export const usePatients = () => {
         throw new Error('Date of birth cannot be in the future');
       }
 
-      const transformedData = {
-        firstName: patientData.firstName || patientData.first_name,
-        lastName: patientData.lastName || patientData.last_name,
-        dateOfBirth: patientData.dateOfBirth || patientData.date_of_birth,
-        gender: patientData.gender,
-        phone: patientData.phone || '',
-        email: patientData.email || '',
-        address: patientData.address || '',
-        emergencyContactName: patientData.emergencyContactName || patientData.emergency_contact_name || '',
-        emergencyContactPhone: patientData.emergencyContactPhone || patientData.emergency_contact_phone || '',
-        medicalHistory: patientData.medicalHistory || patientData.medical_history || '',
-        allergies: patientData.allergies || '',
-        currentMedications: patientData.currentMedications || patientData.current_medications || '',
-        
-        // Consent fields with proper defaults
-        researchConsent: patientData.researchConsent || false,
-        researchConsentDate: patientData.researchConsentDate || null,
-        futureContactConsent: patientData.futureContactConsent || false,
-        anonymizedDataConsent: patientData.anonymizedDataConsent || false,
-        sampleStorageConsent: patientData.sampleStorageConsent || false,
-        sampleTypes: patientData.sampleTypes || '',
-        storageDuration: patientData.storageDuration || '',
-        futureResearchUseConsent: patientData.futureResearchUseConsent || false,
-        destructionConsent: patientData.destructionConsent || false,
-      };
-
-      const newPatient = await patientsService.create(transformedData);
+      const newPatient = await patientsService.create(patientData);
       
       setPatients(prev => [newPatient, ...prev]);
       
       toast({
-        title: "Patient created successfully",
-        description: "Patient has been added to the system",
+        title: "Patient registered successfully",
+        description: `Patient ID: ${newPatient.patientId} has been created`,
       });
       
       return newPatient;
@@ -119,7 +96,41 @@ export const usePatients = () => {
     }
   };
 
-  const searchPatients = async (query) => {
+  const uploadConsentForm = async (patientId: string, file: File) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const updatedPatient = await patientsService.uploadConsentForm(patientId, file);
+      
+      // Update patient in local state
+      setPatients(prev => prev.map(patient => 
+        patient.id === patientId ? updatedPatient : patient
+      ));
+      
+      toast({
+        title: "Consent form uploaded",
+        description: "Consent form has been successfully uploaded",
+      });
+      
+      return updatedPatient;
+    } catch (error) {
+      console.error('Error uploading consent form:', error);
+      setError(error.message);
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload consent form",
+        variant: "destructive"
+      });
+      
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchPatients = async (query: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -142,92 +153,13 @@ export const usePatients = () => {
     }
   };
 
-  const updatePatient = async (id, patientData) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const updatedPatient = await patientsService.update(id, patientData);
-      
-      setPatients(prev => prev.map(patient => 
-        patient.id === id ? updatedPatient : patient
-      ));
-      
-      toast({
-        title: "Patient updated successfully",
-        description: "Patient information has been updated",
-      });
-      
-      return updatedPatient;
-    } catch (error) {
-      console.error('Error updating patient:', error);
-      setError(error.message);
-      
-      if (error.response?.status === 401) {
-        toast({
-          title: "Session expired",
-          description: "Please log in again",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Failed to update patient",
-          description: error.response?.data?.message || "Please try again",
-          variant: "destructive"
-        });
-      }
-      
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deletePatient = async (id) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await patientsService.delete(id);
-      
-      setPatients(prev => prev.filter(patient => patient.id !== id));
-      
-      toast({
-        title: "Patient deleted successfully",
-        description: "Patient has been removed from the system",
-      });
-    } catch (error) {
-      console.error('Error deleting patient:', error);
-      setError(error.message);
-      
-      if (error.response?.status === 401) {
-        toast({
-          title: "Session expired",
-          description: "Please log in again",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Failed to delete patient",
-          description: error.response?.data?.message || "Please try again",
-          variant: "destructive"
-        });
-      }
-      
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return {
     patients,
     loading,
     error,
     addPatient,
+    uploadConsentForm,
     searchPatients,
-    updatePatient,
-    deletePatient,
     refreshPatients: loadPatients
   };
 };
