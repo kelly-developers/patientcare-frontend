@@ -1,6 +1,7 @@
 import { authClient, API_ENDPOINTS } from '@/config/api';
 
 export interface LoginRequest {
+  usernameOrEmail?: string;
   email?: string;
   username?: string;
   password: string;
@@ -14,6 +15,7 @@ export interface SignupRequest {
   lastName: string;
   phone?: string;
   role?: string;
+  specialty?: string;
 }
 
 export interface AuthResponse {
@@ -39,17 +41,23 @@ export interface BackendAuthResponse {
   lastName: string;
   role?: string;
   phone?: string;
+  specialty?: string;
 }
 
 class AuthService {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     try {
-      // Use email or username as the identifier
-      const email = credentials.email || credentials.username;
-      console.log('🔐 Attempting login for user:', email);
+      // Determine if user is using email or username
+      const usernameOrEmail = credentials.email || credentials.username || credentials.usernameOrEmail;
+      console.log('🔐 Attempting login for:', usernameOrEmail);
       
+      if (!usernameOrEmail) {
+        throw new Error('Username or email is required');
+      }
+
+      // Send the single field usernameOrEmail to backend
       const response = await authClient.post(API_ENDPOINTS.AUTH.SIGNIN, {
-        email,
+        usernameOrEmail: usernameOrEmail,
         password: credentials.password
       });
       
@@ -57,33 +65,7 @@ class AuthService {
       
       // Convert backend response to expected format
       const backendResponse = response.data as BackendAuthResponse;
-      return {
-        success: true,
-        token: backendResponse.token,
-        refreshToken: backendResponse.token, // Assuming same token for now
-        user: {
-          id: backendResponse.id.toString(),
-          username: backendResponse.username,
-          email: backendResponse.email,
-          firstName: backendResponse.firstName,
-          lastName: backendResponse.lastName,
-          role: backendResponse.role || 'DOCTOR',
-          phone: backendResponse.phone
-        },
-        data: {
-          token: backendResponse.token,
-          refreshToken: backendResponse.token,
-          user: {
-            id: backendResponse.id.toString(),
-            username: backendResponse.username,
-            email: backendResponse.email,
-            firstName: backendResponse.firstName,
-            lastName: backendResponse.lastName,
-            role: backendResponse.role || 'DOCTOR',
-            phone: backendResponse.phone
-          }
-        }
-      };
+      return this.convertBackendResponse(backendResponse);
     } catch (error: any) {
       console.error('❌ Login service error:', error);
       throw error;
@@ -101,7 +83,8 @@ class AuthService {
         firstName: userData.firstName.trim(),
         lastName: userData.lastName.trim(),
         phone: userData.phone?.trim() || null,
-        role: userData.role || 'DOCTOR'
+        role: userData.role || 'DOCTOR',
+        specialty: userData.specialty || null
       };
 
       console.log('📤 Sending cleaned signup data:', { ...cleanData, password: '***' });
@@ -111,33 +94,7 @@ class AuthService {
       
       // Convert backend response to expected format
       const backendResponse = response.data as BackendAuthResponse;
-      return {
-        success: true,
-        token: backendResponse.token,
-        refreshToken: backendResponse.token, // Assuming same token for now
-        user: {
-          id: backendResponse.id.toString(),
-          username: backendResponse.username,
-          email: backendResponse.email,
-          firstName: backendResponse.firstName,
-          lastName: backendResponse.lastName,
-          role: backendResponse.role || 'DOCTOR',
-          phone: backendResponse.phone
-        },
-        data: {
-          token: backendResponse.token,
-          refreshToken: backendResponse.token,
-          user: {
-            id: backendResponse.id.toString(),
-            username: backendResponse.username,
-            email: backendResponse.email,
-            firstName: backendResponse.firstName,
-            lastName: backendResponse.lastName,
-            role: backendResponse.role || 'DOCTOR',
-            phone: backendResponse.phone
-          }
-        }
-      };
+      return this.convertBackendResponse(backendResponse);
     } catch (error: any) {
       console.error('❌ Signup service error:', error);
       throw error;
@@ -178,6 +135,38 @@ class AuthService {
       console.error('❌ Get current user error:', error);
       throw error;
     }
+  }
+
+  private convertBackendResponse(backendResponse: BackendAuthResponse): AuthResponse {
+    return {
+      success: true,
+      token: backendResponse.token,
+      refreshToken: backendResponse.token, // Assuming same token for now
+      user: {
+        id: backendResponse.id.toString(),
+        username: backendResponse.username,
+        email: backendResponse.email,
+        firstName: backendResponse.firstName,
+        lastName: backendResponse.lastName,
+        role: backendResponse.role || 'DOCTOR',
+        phone: backendResponse.phone,
+        specialty: backendResponse.specialty
+      },
+      data: {
+        token: backendResponse.token,
+        refreshToken: backendResponse.token,
+        user: {
+          id: backendResponse.id.toString(),
+          username: backendResponse.username,
+          email: backendResponse.email,
+          firstName: backendResponse.firstName,
+          lastName: backendResponse.lastName,
+          role: backendResponse.role || 'DOCTOR',
+          phone: backendResponse.phone,
+          specialty: backendResponse.specialty
+        }
+      }
+    };
   }
 }
 

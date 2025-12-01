@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { Heart, Lock, User, Stethoscope, Shield, Activity, Clock, Users, AlertCircle, Loader2, Wifi, WifiOff, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,10 +17,10 @@ interface SignupFormData {
   firstName: string;
   lastName: string;
   role: string;
+  specialty?: string;
 }
 
 export default function Auth() {
-  const [loading, setLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [username, setUsername] = useState('');
@@ -29,6 +29,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [specialty, setSpecialty] = useState('');
   const [activeTab, setActiveTab] = useState('signin');
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -58,7 +59,7 @@ export default function Auth() {
     if (!username || !password) {
       toast({
         title: "Missing Information",
-        description: "Please enter both username and password",
+        description: "Please enter both username/email and password",
         variant: "destructive",
       });
       return;
@@ -76,6 +77,7 @@ export default function Auth() {
     setLoginLoading(true);
 
     try {
+      // The username variable can contain either username or email
       const result = await login(username, password);
       if (result.success) {
         toast({
@@ -151,6 +153,7 @@ export default function Auth() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         role: 'DOCTOR',
+        specialty: specialty.trim() || undefined
       };
 
       console.log('📝 Attempting signup with data:', { 
@@ -175,6 +178,7 @@ export default function Auth() {
         setConfirmPassword('');
         setFirstName('');
         setLastName('');
+        setSpecialty('');
         
         // Switch to signin tab
         toast({
@@ -208,26 +212,6 @@ export default function Auth() {
       });
     } finally {
       setSignupLoading(false);
-    }
-  };
-
-  const handleAutoLogin = async () => {
-    // Optional: You can call this from handleSignUp if you want auto-login
-    setLoginLoading(true);
-    try {
-      const result = await login(username, password);
-      if (result.success) {
-        toast({
-          title: "Welcome!",
-          description: "You have been automatically logged in.",
-        });
-        navigate('/');
-      }
-    } catch (error) {
-      // Auto-login failed, user can manually sign in
-      console.log('Auto-login failed, user needs to sign in manually');
-    } finally {
-      setLoginLoading(false);
     }
   };
 
@@ -386,18 +370,21 @@ export default function Auth() {
                       <div className="space-y-3">
                         <Label htmlFor="signin-username" className="text-white font-bold text-base flex items-center gap-2">
                           <User className="w-5 h-5 text-blue-300" />
-                          Medical ID / Username
+                          Username or Email
                         </Label>
                         <Input
                           id="signin-username"
                           type="text"
-                          placeholder="Enter your staff ID or username"
+                          placeholder="Enter your username or email"
                           className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-300 h-12 text-base font-medium"
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
                           disabled={loginLoading || backendStatus === 'error'}
                         />
+                        <p className="text-xs text-blue-300 mt-1">
+                          You can use either your username or email address
+                        </p>
                       </div>
                       <div className="space-y-3">
                         <Label htmlFor="signin-password" className="text-white font-bold text-base flex items-center gap-2">
@@ -491,7 +478,7 @@ export default function Auth() {
                       
                       <div className="space-y-3">
                         <Label htmlFor="signup-email" className="text-white font-bold text-base flex items-center gap-2">
-                          <User className="w-5 h-5 text-green-300" />
+                          <Mail className="w-5 h-5 text-green-300" />
                           Email
                         </Label>
                         <Input
@@ -502,6 +489,22 @@ export default function Auth() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
+                          disabled={signupLoading || backendStatus === 'error'}
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label htmlFor="signup-specialty" className="text-white font-bold text-base flex items-center gap-2">
+                          <Stethoscope className="w-5 h-5 text-green-300" />
+                          Specialty (Optional)
+                        </Label>
+                        <Input
+                          id="signup-specialty"
+                          type="text"
+                          placeholder="e.g., Cardiology, Neurology"
+                          className="bg-slate-700/80 border-2 border-slate-600 text-white placeholder:text-slate-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all duration-300 h-12 text-base font-medium"
+                          value={specialty}
+                          onChange={(e) => setSpecialty(e.target.value)}
                           disabled={signupLoading || backendStatus === 'error'}
                         />
                       </div>

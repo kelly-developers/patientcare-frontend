@@ -11,12 +11,13 @@ interface User {
   lastName: string;
   role: string;
   phone?: string;
+  specialty?: string;
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   currentUser: User | null;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (usernameOrEmail: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   signup: (data: SignupRequest) => Promise<{ success: boolean; error?: string }>;
   isLoading: boolean;
@@ -184,9 +185,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (usernameOrEmail: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('🔑 Login attempt for user:', username);
+      console.log('🔑 Login attempt for:', usernameOrEmail);
       
       if (backendStatus === 'error') {
         return { 
@@ -195,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      const response = await authService.login({ username, password });
+      const response = await authService.login({ usernameOrEmail, password });
       
       console.log('✅ Login response:', response);
       
@@ -234,8 +235,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
+      } else if (error.response?.status === 400) {
+        errorMessage = 'Invalid username/email or password';
       } else if (error.response?.status === 401) {
-        errorMessage = 'Invalid username or password';
+        errorMessage = 'Invalid username/email or password';
       } else if (error.message) {
         errorMessage = error.message;
       }
