@@ -21,6 +21,8 @@ interface SignupFormData {
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -71,7 +73,7 @@ export default function Auth() {
       return;
     }
 
-    setLoading(true);
+    setLoginLoading(true);
 
     try {
       const result = await login(username, password);
@@ -95,13 +97,14 @@ export default function Auth() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validation
     if (!username || !email || !password || !firstName || !lastName) {
       toast({
         title: "Missing Information",
@@ -138,7 +141,7 @@ export default function Auth() {
       return;
     }
 
-    setLoading(true);
+    setSignupLoading(true);
 
     try {
       const signupData: SignupFormData = {
@@ -150,34 +153,81 @@ export default function Auth() {
         role: 'DOCTOR',
       };
 
+      console.log('📝 Attempting signup with data:', { 
+        ...signupData, 
+        password: '***' 
+      });
+
       const result = await signup(signupData);
+      
+      console.log('✅ Signup result:', result);
+      
       if (result.success) {
         toast({
           title: "Account Created",
-          description: "Your medical professional account has been created",
+          description: "Your medical professional account has been created successfully!",
         });
+        
+        // Clear form
         setUsername('');
         setEmail('');
         setPassword('');
         setConfirmPassword('');
         setFirstName('');
         setLastName('');
+        
+        // Switch to signin tab
+        toast({
+          title: "Sign In Now",
+          description: "Please sign in with your new credentials",
+          duration: 3000,
+        });
         setActiveTab('signin');
       } else {
         toast({
           title: "Registration Failed",
-          description: result.error || "Could not create account",
+          description: result.error || "Could not create account. Please try again.",
           variant: "destructive",
         });
       }
     } catch (error: any) {
+      console.error('❌ Signup error:', error);
+      
+      let errorMessage = "An unexpected error occurred. Please try again.";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "System Error",
-        description: error.message || "Please contact system administrator",
+        title: "Registration Error",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setSignupLoading(false);
+    }
+  };
+
+  const handleAutoLogin = async () => {
+    // Optional: You can call this from handleSignUp if you want auto-login
+    setLoginLoading(true);
+    try {
+      const result = await login(username, password);
+      if (result.success) {
+        toast({
+          title: "Welcome!",
+          description: "You have been automatically logged in.",
+        });
+        navigate('/');
+      }
+    } catch (error) {
+      // Auto-login failed, user can manually sign in
+      console.log('Auto-login failed, user needs to sign in manually');
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -346,7 +396,7 @@ export default function Auth() {
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={loginLoading || backendStatus === 'error'}
                         />
                       </div>
                       <div className="space-y-3">
@@ -362,15 +412,15 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={loginLoading || backendStatus === 'error'}
                         />
                       </div>
                       <Button
                         type="submit"
                         className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3.5 text-base shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-blue-500/50 h-14"
-                        disabled={loading || backendStatus === 'error'}
+                        disabled={loginLoading || backendStatus === 'error'}
                       >
-                        {loading ? (
+                        {loginLoading ? (
                           <div className="flex items-center gap-3">
                             <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
                             <span className="font-semibold">Authenticating...</span>
@@ -401,7 +451,7 @@ export default function Auth() {
                             value={firstName}
                             onChange={(e) => setFirstName(e.target.value)}
                             required
-                            disabled={loading || backendStatus === 'error'}
+                            disabled={signupLoading || backendStatus === 'error'}
                           />
                         </div>
                         <div className="space-y-3">
@@ -417,7 +467,7 @@ export default function Auth() {
                             value={lastName}
                             onChange={(e) => setLastName(e.target.value)}
                             required
-                            disabled={loading || backendStatus === 'error'}
+                            disabled={signupLoading || backendStatus === 'error'}
                           />
                         </div>
                       </div>
@@ -435,7 +485,7 @@ export default function Auth() {
                           value={username}
                           onChange={(e) => setUsername(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={signupLoading || backendStatus === 'error'}
                         />
                       </div>
                       
@@ -452,7 +502,7 @@ export default function Auth() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={signupLoading || backendStatus === 'error'}
                         />
                       </div>
                       
@@ -469,7 +519,7 @@ export default function Auth() {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={signupLoading || backendStatus === 'error'}
                         />
                       </div>
                       <div className="space-y-3">
@@ -485,15 +535,15 @@ export default function Auth() {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           required
-                          disabled={loading || backendStatus === 'error'}
+                          disabled={signupLoading || backendStatus === 'error'}
                         />
                       </div>
                       <Button
                         type="submit"
                         className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3.5 text-base shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-2 border-green-500/50 h-14"
-                        disabled={loading || backendStatus === 'error'}
+                        disabled={signupLoading || backendStatus === 'error'}
                       >
-                        {loading ? (
+                        {signupLoading ? (
                           <div className="flex items-center gap-3">
                             <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
                             <span className="font-semibold">Creating Account...</span>
@@ -506,6 +556,22 @@ export default function Auth() {
                         )}
                       </Button>
                     </form>
+                    
+                    {/* Signup success message */}
+                    {activeTab === 'signup' && !signupLoading && (
+                      <div className="text-center mt-4">
+                        <p className="text-sm text-slate-300">
+                          Already have an account?{' '}
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('signin')}
+                            className="text-blue-400 hover:text-blue-300 font-medium underline"
+                          >
+                            Sign in here
+                          </button>
+                        </p>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
 

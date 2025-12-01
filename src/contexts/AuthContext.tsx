@@ -140,26 +140,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('✅ Signup response:', response);
       
-      if (response.success && response.data) {
-        const { token, refreshToken, user } = response.data;
-        
-        setToken(token);
-        setRefreshToken(refreshToken);
-        setUser(user);
+      // Handle the response - it should already be in the correct format from authService
+      if (response.success && response.token && response.user) {
+        setToken(response.token);
+        if (response.refreshToken) {
+          setRefreshToken(response.refreshToken);
+        }
+        setUser(response.user);
         
         setIsAuthenticated(true);
-        setCurrentUser(user);
+        setCurrentUser(response.user);
         
         toast({
           title: "Account Created",
-          description: `Welcome to PatientCare, ${user.firstName}!`,
+          description: `Welcome to PatientCare, ${response.user.firstName}!`,
         });
         
         return { success: true };
       } else {
         return { 
           success: false, 
-          error: response.message || 'Invalid response from server' 
+          error: response.message || 'Signup completed but no token received' 
         };
       }
     } catch (error: any) {
@@ -173,6 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorMessage = 'Network error. Please check your connection and try again.';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -196,42 +199,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('✅ Login response:', response);
       
-      // Handle both response formats: response.data.token or response.token
-      const token = response.data?.token || response.token;
-      const refreshTokenValue = response.data?.refreshToken || response.refreshToken;
-      const userData = response.data?.user || response.user;
-      
-      if (token) {
-        setToken(token);
-        if (refreshTokenValue) {
-          setRefreshToken(refreshTokenValue);
+      if (response.success && response.token && response.user) {
+        setToken(response.token);
+        if (response.refreshToken) {
+          setRefreshToken(response.refreshToken);
         }
-        if (userData) {
-          setUser(userData);
-          setCurrentUser(userData);
-        }
+        setUser(response.user);
         
         setIsAuthenticated(true);
+        setCurrentUser(response.user);
         
         toast({
           title: "Success",
-          description: `Welcome back${userData?.firstName ? `, ${userData.firstName}` : ''}!`,
-        });
-        
-        return { success: true };
-      } else if (response.success && response.data) {
-        const { token: dataToken, refreshToken: dataRefreshToken, user } = response.data;
-        
-        setToken(dataToken);
-        setRefreshToken(dataRefreshToken);
-        setUser(user);
-        
-        setIsAuthenticated(true);
-        setCurrentUser(user);
-        
-        toast({
-          title: "Success",
-          description: `Welcome back, ${user.firstName}!`,
+          description: `Welcome back, ${response.user.firstName}!`,
         });
         
         return { success: true };
@@ -252,8 +232,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorMessage = 'Network error. Please check your connection.';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
       } else if (error.response?.status === 401) {
         errorMessage = 'Invalid username or password';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
       return { success: false, error: errorMessage };

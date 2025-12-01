@@ -29,6 +29,18 @@ export interface AuthResponse {
   };
 }
 
+export interface BackendAuthResponse {
+  token: string;
+  type?: string;
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role?: string;
+  phone?: string;
+}
+
 class AuthService {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     try {
@@ -40,8 +52,38 @@ class AuthService {
         email,
         password: credentials.password
       });
-      console.log('✅ Login successful');
-      return response.data;
+      
+      console.log('✅ Login raw response:', response.data);
+      
+      // Convert backend response to expected format
+      const backendResponse = response.data as BackendAuthResponse;
+      return {
+        success: true,
+        token: backendResponse.token,
+        refreshToken: backendResponse.token, // Assuming same token for now
+        user: {
+          id: backendResponse.id.toString(),
+          username: backendResponse.username,
+          email: backendResponse.email,
+          firstName: backendResponse.firstName,
+          lastName: backendResponse.lastName,
+          role: backendResponse.role || 'DOCTOR',
+          phone: backendResponse.phone
+        },
+        data: {
+          token: backendResponse.token,
+          refreshToken: backendResponse.token,
+          user: {
+            id: backendResponse.id.toString(),
+            username: backendResponse.username,
+            email: backendResponse.email,
+            firstName: backendResponse.firstName,
+            lastName: backendResponse.lastName,
+            role: backendResponse.role || 'DOCTOR',
+            phone: backendResponse.phone
+          }
+        }
+      };
     } catch (error: any) {
       console.error('❌ Login service error:', error);
       throw error;
@@ -64,8 +106,38 @@ class AuthService {
 
       console.log('📤 Sending cleaned signup data:', { ...cleanData, password: '***' });
       const response = await authClient.post(API_ENDPOINTS.AUTH.SIGNUP, cleanData);
-      console.log('✅ Signup successful');
-      return response.data;
+      
+      console.log('✅ Signup raw response:', response.data);
+      
+      // Convert backend response to expected format
+      const backendResponse = response.data as BackendAuthResponse;
+      return {
+        success: true,
+        token: backendResponse.token,
+        refreshToken: backendResponse.token, // Assuming same token for now
+        user: {
+          id: backendResponse.id.toString(),
+          username: backendResponse.username,
+          email: backendResponse.email,
+          firstName: backendResponse.firstName,
+          lastName: backendResponse.lastName,
+          role: backendResponse.role || 'DOCTOR',
+          phone: backendResponse.phone
+        },
+        data: {
+          token: backendResponse.token,
+          refreshToken: backendResponse.token,
+          user: {
+            id: backendResponse.id.toString(),
+            username: backendResponse.username,
+            email: backendResponse.email,
+            firstName: backendResponse.firstName,
+            lastName: backendResponse.lastName,
+            role: backendResponse.role || 'DOCTOR',
+            phone: backendResponse.phone
+          }
+        }
+      };
     } catch (error: any) {
       console.error('❌ Signup service error:', error);
       throw error;
