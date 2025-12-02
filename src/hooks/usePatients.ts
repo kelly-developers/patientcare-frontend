@@ -1,6 +1,7 @@
+// hooks/usePatients.ts
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { patientsService, Patient, CreatePatientRequest } from '@/services/patientsService';
+import { patientsService, Patient, CreatePatientRequest, VitalDataRequest } from '@/services/patientsService';
 import { apiClient, API_ENDPOINTS } from '@/config/api';
 
 export type { Patient };
@@ -56,21 +57,6 @@ export const usePatients = () => {
         throw new Error('Consent must be accepted to register patient');
       }
 
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(patientData.dateOfBirth)) {
-        throw new Error('Date of birth must be in YYYY-MM-DD format');
-      }
-
-      // Validate date is not in future
-      const dobDate = new Date(patientData.dateOfBirth);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (dobDate > today) {
-        throw new Error('Date of birth cannot be in the future');
-      }
-
       const newPatient = await patientsService.create(patientData);
       
       setPatients(prev => [newPatient, ...prev]);
@@ -105,30 +91,44 @@ export const usePatients = () => {
     }
   };
 
-  const uploadConsentForm = async (patientId: string, file: File) => {
+  const recordVitalData = async (vitalData: VitalDataRequest) => {
     try {
       setLoading(true);
       setError(null);
       
-      const updatedPatient = await patientsService.uploadConsentForm(patientId, file);
+      console.log('📝 Recording vital data:', vitalData);
       
-      setPatients(prev => prev.map(patient => 
-        patient.id === patientId ? updatedPatient : patient
-      ));
+      // Validate required fields
+      const requiredFields = ['patientId', 'systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation'];
+      const missingFields = requiredFields.filter(field => !vitalData[field as keyof VitalDataRequest]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      const response = await patientsService.recordVitalData(vitalData);
       
       toast({
-        title: "Consent form uploaded",
-        description: "Consent form has been successfully uploaded",
+        title: "Vital data recorded successfully",
+        description: `Vital data has been recorded for patient ID: ${vitalData.patientId}`,
       });
       
-      return updatedPatient;
+      return response;
     } catch (error: any) {
-      console.error('Error uploading consent form:', error);
+      console.error('❌ Error recording vital data:', error);
       setError(error.message);
       
+      let errorMessage = "Failed to record vital data";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Upload failed",
-        description: error.message || "Failed to upload consent form",
+        title: "Failed to record vital data",
+        description: errorMessage,
         variant: "destructive"
       });
       
@@ -167,10 +167,13 @@ export const usePatients = () => {
       setError(null);
       
       const response = await apiClient.put(`${API_ENDPOINTS.PATIENTS.BASE}/${id}`, patientData);
-      const updatedPatient = response.data?.data || response.data;
+      const updatedPatient = response.data;
       
       setPatients(prev => prev.map(patient => 
-        patient.id === id ? updatedPatient : patient
+        patient.id === id ? {
+          ...patient,
+          ...updatedPatient
+        } : patient
       ));
       
       toast({
@@ -224,6 +227,38 @@ export const usePatients = () => {
     }
   };
 
+  const getPatientVitals = async (patientId: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const vitals = await patientsService.getPatientVitals(patientId);
+      return vitals;
+    } catch (error: any) {
+      console.error('Error fetching patient vitals:', error);
+      setError(error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getVitalsRecordedByMe = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const vitals = await patientsService.getVitalsRecordedByMe();
+      return vitals;
+    } catch (error: any) {
+      console.error('Error fetching vital data:', error);
+      setError(error.message);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     patients,
     loading,
@@ -231,7 +266,9 @@ export const usePatients = () => {
     addPatient,
     updatePatient,
     deletePatient,
-    uploadConsentForm,
+    recordVitalData,
+    getPatientVitals,
+    getVitalsRecordedByMe,
     searchPatients,
     refreshPatients: loadPatients
   };

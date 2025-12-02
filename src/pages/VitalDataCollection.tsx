@@ -1,3 +1,4 @@
+// VitalDataCollection.tsx
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Heart, Activity, Thermometer, Weight, Ruler, Clock, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { usePatients } from "@/hooks/usePatients";
 
 interface Patient {
-  id: string;
-  patientId?: string; // Make optional since backend might return 'id' instead
+  id: string; // This is the numeric ID from backend (stored as string for Select component)
+  patientId: string; // This is the generated patient ID like "HOSP-2024-XXXXX"
   firstName: string;
   lastName: string;
   dateOfBirth: string;
@@ -21,8 +23,7 @@ interface Patient {
 
 interface VitalData {
   id: string;
-  patientId: string;
-  patientName: string;
+  patientId: number; // Important: This is the numeric patient ID
   systolicBP: number;
   diastolicBP: number;
   heartRate: number;
@@ -34,39 +35,15 @@ interface VitalData {
   respiratoryRate?: number;
   painLevel?: number;
   notes?: string;
-  bmi?: number;
-  bloodPressure?: string;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   recordedAt: string;
   recordedByName: string;
 }
 
-// Simple token management
-const getToken = (): string | null => {
-  try {
-    return localStorage.getItem('patientcare_token');
-  } catch (error) {
-    console.error('Error getting token:', error);
-    return null;
-  }
-};
-
-const isTokenValid = (): boolean => {
-  const token = getToken();
-  if (!token) return false;
-  
-  try {
-    // Simple check - in a real app you'd decode and check expiration
-    return token.length > 10;
-  } catch (error) {
-    return false;
-  }
-};
-
 export default function VitalDataCollection() {
   const [vitals, setVitals] = useState<VitalData[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState<string>(""); // Store patient ID (string)
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -82,92 +59,39 @@ export default function VitalDataCollection() {
     painLevel: "",
     notes: ""
   });
+  
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { patients: backendPatients, loading: patientsLoading, recordVitalData, getVitalsRecordedByMe } = usePatients();
 
   useEffect(() => {
-    // Check authentication first
-    if (!isTokenValid()) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to access this page",
-        variant: "destructive",
-      });
-      navigate('/auth');
-      return;
-    }
-    
     loadPatients();
     loadVitals();
-  }, [navigate, toast]);
+  }, []);
+
+  useEffect(() => {
+    if (backendPatients && backendPatients.length > 0) {
+      const processedPatients = backendPatients.map((patient: any) => ({
+        id: patient.id?.toString() || '', // Convert to string for Select component
+        patientId: patient.patientId || patient.patient_id || `HOSP-${new Date().getFullYear()}-${patient.id}`,
+        firstName: patient.firstName || patient.first_name || '',
+        lastName: patient.lastName || patient.last_name || '',
+        dateOfBirth: patient.dateOfBirth || patient.date_of_birth || '',
+        gender: patient.gender || ''
+      }));
+      setPatients(processedPatients);
+    }
+  }, [backendPatients]);
 
   const loadPatients = async () => {
     try {
       setLoading(true);
-      const token = getToken();
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const response = await fetch('https://patientcarebackend.onrender.com/api/patients', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log('Response status:', response.status);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Patients API response:', result);
-        
-        if (result.success) {
-          // IMPORTANT FIX: Check the actual structure of the response
-          const patientsData = result.data.map((patient: any) => ({
-            id: patient.id, // Use 'id' from backend
-            patientId: patient.patientId || patient.id, // Fallback to id if patientId doesn't exist
-            firstName: patient.firstName || patient.firstname,
-            lastName: patient.lastName || patient.lastname,
-            dateOfBirth: patient.dateOfBirth || patient.dateofbirth || patient.dob,
-            gender: patient.gender
-          }));
-          
-          console.log('Processed patients data:', patientsData);
-          setPatients(patientsData);
-          
-          if (patientsData.length > 0) {
-            toast({
-              title: "Patients Loaded",
-              description: `Successfully loaded ${patientsData.length} patients`,
-            });
-          }
-        } else {
-          console.error('API returned success: false', result);
-          toast({
-            title: "No Patients Found",
-            description: "No patient records available. Please register patients first.",
-            variant: "destructive",
-          });
-        }
-      } else if (response.status === 401) {
-        toast({
-          title: "Session Expired",
-          description: "Please log in again",
-          variant: "destructive",
-        });
-        localStorage.removeItem('patientcare_token');
-        navigate('/auth');
-      } else {
-        const errorText = await response.text();
-        console.error('API Error:', errorText);
-        throw new Error(`Failed to load patients: ${response.status} ${response.statusText}`);
-      }
+      console.log('🔍 Loading patients...');
     } catch (error: any) {
-      console.error('Error loading patients:', error);
+      console.error('❌ Error loading patients:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to load patients. Please check your connection.",
+        description: "Failed to load patients",
         variant: "destructive",
       });
     } finally {
@@ -177,36 +101,16 @@ export default function VitalDataCollection() {
 
   const loadVitals = async () => {
     try {
-      const token = getToken();
-      if (!token) return;
-
-      const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data/recorded-by-me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Vitals API response:', result);
-        
-        if (result.success && result.data) {
-          // Add risk level to each vital record
-          const vitalsWithRisk = result.data.map((vital: any) => ({
-            ...vital,
-            riskLevel: calculateRiskLevel(vital)
-          }));
-          setVitals(vitalsWithRisk);
-        }
-      } else if (response.status === 401) {
-        console.log('Authentication failed for vital data');
-      } else {
-        console.log('Failed to load vital data:', response.status);
+      const vitalsData = await getVitalsRecordedByMe();
+      if (vitalsData && Array.isArray(vitalsData)) {
+        const vitalsWithRisk = vitalsData.map((vital: any) => ({
+          ...vital,
+          riskLevel: calculateRiskLevel(vital)
+        }));
+        setVitals(vitalsWithRisk);
       }
     } catch (error: any) {
       console.error('Error loading vital data:', error);
-      // Don't show error toast for vital data loading as it might not be critical
     }
   };
 
@@ -248,7 +152,7 @@ export default function VitalDataCollection() {
     }
 
     // Validate required fields
-    const requiredFields = ['systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation', 'weight', 'height'];
+    const requiredFields = ['systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
     
     if (missingFields.length > 0) {
@@ -267,7 +171,7 @@ export default function VitalDataCollection() {
     const temperature = parseFloat(formData.temperature);
     const oxygenSat = parseFloat(formData.oxygenSaturation);
 
-    if (systolic < 50 || systolic > 250) {
+    if (isNaN(systolic) || systolic < 50 || systolic > 250) {
       toast({
         title: "Invalid Value",
         description: "Systolic BP must be between 50 and 250",
@@ -276,7 +180,7 @@ export default function VitalDataCollection() {
       return;
     }
 
-    if (diastolic < 30 || diastolic > 150) {
+    if (isNaN(diastolic) || diastolic < 30 || diastolic > 150) {
       toast({
         title: "Invalid Value",
         description: "Diastolic BP must be between 30 and 150",
@@ -285,7 +189,7 @@ export default function VitalDataCollection() {
       return;
     }
 
-    if (heartRate < 30 || heartRate > 250) {
+    if (isNaN(heartRate) || heartRate < 30 || heartRate > 250) {
       toast({
         title: "Invalid Value",
         description: "Heart rate must be between 30 and 250",
@@ -294,7 +198,7 @@ export default function VitalDataCollection() {
       return;
     }
 
-    if (temperature < 32 || temperature > 43) {
+    if (isNaN(temperature) || temperature < 32 || temperature > 43) {
       toast({
         title: "Invalid Value",
         description: "Temperature must be between 32°C and 43°C",
@@ -303,7 +207,7 @@ export default function VitalDataCollection() {
       return;
     }
 
-    if (oxygenSat < 70 || oxygenSat > 100) {
+    if (isNaN(oxygenSat) || oxygenSat < 70 || oxygenSat > 100) {
       toast({
         title: "Invalid Value",
         description: "Oxygen saturation must be between 70% and 100%",
@@ -315,103 +219,55 @@ export default function VitalDataCollection() {
     setSubmitting(true);
 
     try {
-      const token = getToken();
-      if (!token) {
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to record vital data",
-          variant: "destructive",
-        });
-        navigate('/auth');
-        return;
-      }
-
-      // Prepare the request data - ensure all fields are properly formatted
+      // Prepare the vital data request
       const vitalDataRequest = {
-        patientId: selectedPatient,
+        patientId: parseInt(selectedPatient), // Convert to number for backend
         systolicBP: systolic,
         diastolicBP: diastolic,
         heartRate: heartRate,
-        respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : null,
+        respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : undefined,
         temperature: temperature,
         oxygenSaturation: oxygenSat,
-        height: formData.height ? parseFloat(formData.height) : null,
-        weight: formData.weight ? parseFloat(formData.weight) : null,
-        bloodGlucose: formData.bloodGlucose ? parseFloat(formData.bloodGlucose) : null,
-        painLevel: formData.painLevel ? parseInt(formData.painLevel) : null,
-        notes: formData.notes || null
+        weight: formData.weight ? parseFloat(formData.weight) : 0,
+        height: formData.height ? parseFloat(formData.height) : 0,
+        bloodGlucose: formData.bloodGlucose ? parseFloat(formData.bloodGlucose) : undefined,
+        painLevel: formData.painLevel ? parseInt(formData.painLevel) : undefined,
+        notes: formData.notes || undefined
       };
 
-      console.log('Submitting vital data:', vitalDataRequest);
+      console.log('📝 Submitting vital data:', vitalDataRequest);
 
-      const response = await fetch('https://patientcarebackend.onrender.com/api/vital-data', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(vitalDataRequest)
+      // Record vital data
+      await recordVitalData(vitalDataRequest);
+      
+      // Reset form
+      setFormData({
+        systolicBP: "",
+        diastolicBP: "",
+        heartRate: "",
+        respiratoryRate: "",
+        temperature: "",
+        weight: "",
+        height: "",
+        oxygenSaturation: "",
+        bloodGlucose: "",
+        painLevel: "",
+        notes: ""
+      });
+      setSelectedPatient("");
+
+      toast({
+        title: "Success",
+        description: `Vital data recorded successfully for ${getPatientName(selectedPatient)}`,
       });
 
-      const responseText = await response.text();
-      let result;
-      
-      try {
-        result = responseText ? JSON.parse(responseText) : {};
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        throw new Error('Invalid response from server');
-      }
-
-      console.log('Vital data submission response:', result);
-
-      if (response.ok) {
-        if (result.success) {
-          const newVital = result.data;
-          const riskLevel = calculateRiskLevel(newVital);
-          
-          // Add risk level to the vital data for display
-          const vitalWithRisk = {
-            ...newVital,
-            riskLevel
-          };
-
-          setVitals(prev => [vitalWithRisk, ...prev]);
-          
-          // Reset form
-          setFormData({
-            systolicBP: "",
-            diastolicBP: "",
-            heartRate: "",
-            respiratoryRate: "",
-            temperature: "",
-            weight: "",
-            height: "",
-            oxygenSaturation: "",
-            bloodGlucose: "",
-            painLevel: "",
-            notes: ""
-          });
-          setSelectedPatient("");
-
-          toast({
-            title: "Success",
-            description: `Vital data recorded successfully for patient ${getPatientName(selectedPatient)}. Risk level: ${riskLevel.toUpperCase()}`,
-          });
-
-          // Reload vitals to ensure we have the latest data
-          loadVitals();
-        } else {
-          throw new Error(result.message || 'Failed to record vital data');
-        }
-      } else {
-        throw new Error(result.message || `Server error: ${response.status}`);
-      }
+      // Reload vitals
+      loadVitals();
     } catch (error: any) {
-      console.error('Error recording vital data:', error);
+      console.error('❌ Error recording vital data:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to record vital data. Please check if the patient exists and all values are valid.",
+        description: error.message || "Failed to record vital data",
         variant: "destructive",
       });
     } finally {
@@ -430,28 +286,14 @@ export default function VitalDataCollection() {
   };
 
   const getPatientName = (patientId: string) => {
-    const patient = patients.find(p => p.id === patientId || p.patientId === patientId);
+    const patient = patients.find(p => p.id === patientId);
     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
-  if (!isTokenValid()) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-              <h2 className="text-xl font-bold mb-2">Authentication Required</h2>
-              <p className="text-muted-foreground mb-4">Please log in to access vital data collection</p>
-              <Button onClick={() => navigate('/auth')}>
-                Go to Login
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const getPatientById = (patientId: number) => {
+    const patient = patients.find(p => parseInt(p.id) === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
+  };
 
   return (
     <div className="space-y-6">
@@ -481,19 +323,19 @@ export default function VitalDataCollection() {
                 <Select 
                   value={selectedPatient} 
                   onValueChange={setSelectedPatient}
-                  disabled={loading || submitting}
+                  disabled={patientsLoading || submitting}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={loading ? "Loading patients..." : "Choose patient..."} />
+                    <SelectValue placeholder={patientsLoading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.length > 0 ? (
                       patients.map((patient) => (
                         <SelectItem 
                           key={patient.id} 
-                          value={patient.id} // Use patient.id as value
+                          value={patient.id}
                         >
-                          {patient.firstName} {patient.lastName} - {patient.patientId || patient.id}
+                          {patient.firstName} {patient.lastName} - {patient.patientId}
                         </SelectItem>
                       ))
                     ) : (
@@ -504,18 +346,18 @@ export default function VitalDataCollection() {
                   </SelectContent>
                 </Select>
                 <div className="flex justify-between items-center">
-                  {loading && (
+                  {patientsLoading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Loading patients...
                     </div>
                   )}
-                  {!loading && patients.length === 0 && (
+                  {!patientsLoading && patients.length === 0 && (
                     <div className="text-sm text-muted-foreground">
                       No patients found. Please register patients first.
                     </div>
                   )}
-                  {!loading && patients.length > 0 && (
+                  {!patientsLoading && patients.length > 0 && (
                     <div className="text-sm text-muted-foreground">
                       {patients.length} patient(s) found
                     </div>
@@ -618,7 +460,7 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="weight">Weight (kg) *</Label>
+                  <Label htmlFor="weight">Weight (kg)</Label>
                   <Input
                     id="weight"
                     type="number"
@@ -626,21 +468,19 @@ export default function VitalDataCollection() {
                     placeholder="70"
                     value={formData.weight}
                     onChange={(e) => setFormData({...formData, weight: e.target.value})}
-                    required
                     min="1"
                     max="300"
                     disabled={submitting}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="height">Height (cm) *</Label>
+                  <Label htmlFor="height">Height (cm)</Label>
                   <Input
                     id="height"
                     type="number"
                     placeholder="170"
                     value={formData.height}
                     onChange={(e) => setFormData({...formData, height: e.target.value})}
-                    required
                     min="50"
                     max="250"
                     disabled={submitting}
@@ -723,7 +563,7 @@ export default function VitalDataCollection() {
               {vitals.map((vital) => (
                 <div key={vital.id} className="p-4 bg-background rounded-lg border">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="font-medium">{getPatientName(vital.patientId)}</div>
+                    <div className="font-medium">{getPatientById(vital.patientId)}</div>
                     <Badge className={getRiskBadgeColor(vital.riskLevel)}>
                       {vital.riskLevel.toUpperCase()}
                     </Badge>
@@ -736,7 +576,8 @@ export default function VitalDataCollection() {
                     {vital.respiratoryRate && <div>RR: {vital.respiratoryRate}</div>}
                     {vital.bloodGlucose && <div>Glucose: {vital.bloodGlucose} mg/dL</div>}
                     {vital.painLevel !== undefined && <div>Pain: {vital.painLevel}/10</div>}
-                    {vital.bmi && <div>BMI: {vital.bmi.toFixed(1)}</div>}
+                    {vital.weight && <div>Weight: {vital.weight} kg</div>}
+                    {vital.height && <div>Height: {vital.height} cm</div>}
                   </div>
                   {vital.notes && (
                     <div className="mt-2 text-sm text-muted-foreground">
