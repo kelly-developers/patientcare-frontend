@@ -121,235 +121,231 @@ const PatientCard = ({ patient, onViewDetails }: any) => {
   );
 };
 
-// Enhanced Components
-const EnhancedConsentSection = ({ consent, onChange, loading }: any) => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
-      <div className="space-y-1">
-        <Label htmlFor="dataUse" className="text-base font-medium">
-          Use my health data for research purposes
-        </Label>
-        <p className="text-sm text-muted-foreground">
-          I consent to my anonymized health data being used in medical research studies
-        </p>
-      </div>
-      <Switch
-        id="dataUse"
-        checked={consent.dataUse}
-        onCheckedChange={(checked) => onChange("dataUse", checked)}
-        disabled={loading}
-      />
-    </div>
-
-    {consent.dataUse && (
-      <div className="space-y-4 pl-6 border-l-2 border-blue-200">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="anonymizedData"
-            checked={consent.anonymizedData}
-            onCheckedChange={(checked) => onChange("anonymizedData", checked)}
-            disabled={loading}
-          />
-          <Label htmlFor="anonymizedData" className="text-sm">
-            I understand my data will be anonymized and cannot be traced back to me
-          </Label>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="futureContact"
-            checked={consent.futureContact}
-            onCheckedChange={(checked) => onChange("futureContact", checked)}
-            disabled={loading}
-          />
-          <Label htmlFor="futureContact" className="text-sm">
-            I consent to being contacted about future research studies I may be eligible for
-          </Label>
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Consent Date</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-full justify-start text-left font-normal"
-                disabled={loading}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {consent.consentDate ? (
-                  format(consent.consentDate, "PPP")
-                ) : (
-                  <span>Select consent date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={consent.consentDate || undefined}
-                onSelect={(date) => onChange("consentDate", date)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const EnhancedSampleStorageSection = ({ 
-  storage, 
+// Enhanced Research Data Consent Component with Download and Physical Signature
+const EnhancedResearchConsentSection = ({ 
+  consent, 
   onChange, 
-  onSampleTypeToggle, 
   loading, 
-  sampleTypeOptions, 
-  storageDurationOptions 
-}: any) => (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border">
-      <div className="space-y-1">
-        <Label htmlFor="storeSamples" className="text-base font-medium">
-          Store my biological samples for research
-        </Label>
-        <p className="text-sm text-muted-foreground">
-          I consent to storing my biological samples for use in future research studies
-        </p>
-      </div>
-      <Switch
-        id="storeSamples"
-        checked={storage.storeSamples}
-        onCheckedChange={(checked) => onChange("storeSamples", checked)}
-        disabled={loading}
-      />
-    </div>
+  onDownloadConsent,
+  consentFile,
+  onFileUpload,
+  onRemoveFile,
+  onConsentAcceptedChange,
+  consentAccepted 
+}: any) => {
+  const [fileUploaded, setFileUploaded] = useState(false);
 
-    {storage.storeSamples && (
-      <div className="space-y-4 pl-6 border-l-2 border-green-200">
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Sample Types to Store</Label>
-          <div className="grid grid-cols-1 gap-2">
-            {sampleTypeOptions.map((option: any) => (
-              <div key={option.value} className="flex items-start space-x-2 p-2 rounded-lg border">
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== "application/pdf") {
+        // Handle error - should be done via toast in parent
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        // Handle error - should be done via toast in parent
+        return;
+      }
+      onFileUpload(file);
+      setFileUploaded(true);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    onRemoveFile();
+    setFileUploaded(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Research Data Consent Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
+          <div className="space-y-1">
+            <Label htmlFor="dataUse" className="text-base font-medium">
+              Use my health data for research purposes
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              I consent to my anonymized health data being used in medical research studies
+            </p>
+          </div>
+          <Switch
+            id="dataUse"
+            checked={consent.dataUse}
+            onCheckedChange={(checked) => onChange("dataUse", checked)}
+            disabled={loading}
+          />
+        </div>
+
+        {consent.dataUse && (
+          <div className="space-y-4 pl-6 border-l-2 border-blue-200">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="anonymizedData"
+                checked={consent.anonymizedData}
+                onCheckedChange={(checked) => onChange("anonymizedData", checked)}
+                disabled={loading}
+              />
+              <Label htmlFor="anonymizedData" className="text-sm">
+                I understand my data will be anonymized and cannot be traced back to me
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="futureContact"
+                checked={consent.futureContact}
+                onCheckedChange={(checked) => onChange("futureContact", checked)}
+                disabled={loading}
+              />
+              <Label htmlFor="futureContact" className="text-sm">
+                I consent to being contacted about future research studies I may be eligible for
+              </Label>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Consent Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                    disabled={loading}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {consent.consentDate ? (
+                      format(consent.consentDate, "PPP")
+                    ) : (
+                      <span>Select consent date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={consent.consentDate || undefined}
+                    onSelect={(date) => onChange("consentDate", date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Consent Form Download Section */}
+            {consent.dataUse && (
+              <div className="pt-4 border-t">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-semibold">
+                      1
+                    </div>
+                    <h4 className="font-medium text-blue-800">Download Consent Form</h4>
+                  </div>
+                  <p className="text-sm text-blue-600 mb-4">
+                    Download the research data consent form for physical signature.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={onDownloadConsent}
+                    className="whitespace-nowrap"
+                    disabled={loading}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download Consent Form
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Physical Signature Upload Section */}
+            {consent.dataUse && (
+              <div className="pt-4">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-semibold">
+                      2
+                    </div>
+                    <h4 className="font-medium text-green-800">Upload Signed Consent Form</h4>
+                  </div>
+                  
+                  {consentFile ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-lg border">
+                        <FileText className="w-6 h-6 text-green-500" />
+                        <div className="flex-1">
+                          <p className="font-medium">{consentFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(consentFile.size || 0) / 1024} KB • PDF
+                          </p>
+                        </div>
+                        <CheckCircle className="w-5 h-5 text-green-500" />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRemoveFile}
+                      >
+                        Remove File
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center">
+                        <Upload className="w-8 h-8 text-green-400 mx-auto mb-3" />
+                        <p className="text-sm font-medium text-green-700 mb-2">
+                          Upload signed consent form
+                        </p>
+                        <p className="text-xs text-green-600 mb-4">
+                          Upload the physically signed consent form (PDF only, max 10MB)
+                        </p>
+                        <Input
+                          id="research_consent_form"
+                          type="file"
+                          accept=".pdf"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <Label
+                          htmlFor="research_consent_form"
+                          className="cursor-pointer inline-flex items-center justify-center px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Choose File
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Confirmation Checkbox */}
+            {consentFile && (
+              <div className="flex items-start space-x-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <Checkbox
-                  id={option.value}
-                  checked={storage.sampleTypes.includes(option.value)}
-                  onCheckedChange={() => onSampleTypeToggle(option.value)}
-                  disabled={loading}
+                  id="research_consent_accepted"
+                  checked={consentAccepted}
+                  onCheckedChange={(checked) => onConsentAcceptedChange(checked === true)}
+                  className="mt-1"
                 />
-                <div className="flex-1">
-                  <Label htmlFor={option.value} className="text-sm font-medium">
-                    {option.value}
+                <div className="space-y-1">
+                  <Label htmlFor="research_consent_accepted" className="font-medium text-purple-800">
+                    I confirm that the patient has physically signed the research consent form
                   </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {option.description}
+                  <p className="text-sm text-purple-600">
+                    By checking this box, you confirm that the patient has reviewed and physically signed 
+                    the research data consent form, and the uploaded document is the authentic signed copy.
                   </p>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Storage Duration</Label>
-          <Select
-            value={storage.storageDuration}
-            onValueChange={(value) => onChange("storageDuration", value)}
-            disabled={loading}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {storageDurationOptions.map((option: any) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="futureResearchUse"
-              checked={storage.futureResearchUse}
-              onCheckedChange={(checked) => onChange("futureResearchUse", checked)}
-              disabled={loading}
-            />
-            <Label htmlFor="futureResearchUse" className="text-sm">
-              I consent to my samples being used in future research studies beyond the current one
-            </Label>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="destructionConsent"
-              checked={storage.destructionConsent}
-              onCheckedChange={(checked) => onChange("destructionConsent", checked)}
-              disabled={loading}
-            />
-            <Label htmlFor="destructionConsent" className="text-sm">
-              I consent to the destruction of my samples at the end of the storage period
-            </Label>
-          </div>
-        </div>
-
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Important Information
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Your samples will be stored securely and used only for approved research purposes. 
-                You may withdraw your consent at any time by contacting our research coordinator.
-              </p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
-    )}
-  </div>
-);
-
-const EnhancedConsentSummary = ({ researchConsent, sampleStorage }: any) => (
-  <div className="space-y-3">
-    {researchConsent.dataUse && (
-      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-        <div>
-          <span className="text-sm font-medium">Research Data Consent</span>
-          <div className="text-xs text-muted-foreground mt-1">
-            {researchConsent.anonymizedData && "• Data will be anonymized\n"}
-            {researchConsent.futureContact && "• Future contact consented\n"}
-            {researchConsent.consentDate && `• Consent date: ${format(researchConsent.consentDate, "MMM dd, yyyy")}`}
-          </div>
-        </div>
-        <Badge variant="default" className="bg-green-500">
-          Granted
-        </Badge>
-      </div>
-    )}
-    {sampleStorage.storeSamples && (
-      <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-        <div>
-          <span className="text-sm font-medium">Sample Storage Consent</span>
-          <div className="text-xs text-muted-foreground mt-1">
-            {sampleStorage.sampleTypes.length > 0 && `• Samples: ${sampleStorage.sampleTypes.join(', ')}\n`}
-            {sampleStorage.storageDuration && `• Duration: ${sampleStorage.storageDuration}\n`}
-            {sampleStorage.futureResearchUse && "• Future research use consented"}
-          </div>
-        </div>
-        <Badge variant="default" className="bg-green-500">
-          Granted
-        </Badge>
-      </div>
-    )}
-  </div>
-);
+    </div>
+  );
+};
 
 export default function PatientOnboarding() {
   const [selectedDate, setSelectedDate] = useState<Date>();
@@ -360,16 +356,10 @@ export default function PatientOnboarding() {
     dataUse: false,
     futureContact: false,
     anonymizedData: false,
-    specificStudies: [] as string[],
     consentDate: null as Date | null
   });
-  const [sampleStorage, setSampleStorage] = useState({
-    storeSamples: false,
-    sampleTypes: [] as string[],
-    storageDuration: "5years",
-    futureResearchUse: false,
-    destructionConsent: false
-  });
+  const [researchConsentFile, setResearchConsentFile] = useState<File | null>(null);
+  const [researchConsentAccepted, setResearchConsentAccepted] = useState(false);
   const { toast } = useToast();
   const { patients, addPatient, searchPatients, loading, error } = usePatients();
 
@@ -396,20 +386,95 @@ export default function PatientOnboarding() {
     }));
   };
 
-  const handleSampleStorageChange = (field: string, value: any) => {
-    setSampleStorage(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleResearchConsentFileUpload = (file: File) => {
+    if (file.type !== "application/pdf") {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PDF file",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+    setResearchConsentFile(file);
+    toast({
+      title: "File uploaded successfully",
+      description: `${file.name} has been uploaded`,
+    });
   };
 
-  const handleSampleTypeToggle = (sampleType: string) => {
-    setSampleStorage(prev => ({
-      ...prev,
-      sampleTypes: prev.sampleTypes.includes(sampleType)
-        ? prev.sampleTypes.filter(type => type !== sampleType)
-        : [...prev.sampleTypes, sampleType]
-    }));
+  const handleRemoveResearchConsentFile = () => {
+    setResearchConsentFile(null);
+    setResearchConsentAccepted(false);
+  };
+
+  const handleDownloadResearchConsentForm = () => {
+    // Generate research consent form content
+    const consentContent = `
+RESEARCH DATA CONSENT FORM
+=============================
+
+CONSENT FOR USE OF HEALTH DATA IN RESEARCH
+
+I hereby give my consent for my health data to be used in medical research studies under the following terms:
+
+1. DATA USAGE: I consent to my anonymized health data being used in medical research studies to advance medical knowledge and improve healthcare outcomes.
+
+2. ANONYMIZATION: I understand that my data will be anonymized and cannot be traced back to me personally. All identifying information will be removed before data is used for research.
+
+3. FUTURE CONTACT: ${researchConsent.futureContact ? 
+      "I consent to being contacted about future research studies I may be eligible for." : 
+      "I do not consent to being contacted about future research studies."}
+
+4. CONSENT DATE: ${researchConsent.consentDate ? format(researchConsent.consentDate, "MMMM dd, yyyy") : "Date not specified"}
+
+5. WITHDRAWAL RIGHTS: I understand that I may withdraw my consent at any time by notifying the research coordinator in writing.
+
+6. DATA SECURITY: I understand that my data will be stored securely and accessed only by authorized research personnel.
+
+By signing below, I acknowledge that I have read and understood this consent form, and I voluntarily agree to participate.
+
+_________________________
+Patient's Signature
+
+Date: ___________________
+
+_________________________
+Witness Signature
+
+Date: ___________________
+
+RESEARCHER'S ACKNOWLEDGMENT
+
+I confirm that I have explained the nature and purpose of this research data consent to the patient and answered all questions.
+
+_________________________
+Researcher's Signature
+
+Date: ___________________
+    `;
+    
+    const blob = new Blob([consentContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Research-Consent-Form-${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Research consent form downloaded",
+      description: "Please print, sign, and upload the signed form",
+    });
   };
 
   const handleSubmitWithConsent = async (patientData: any) => {
@@ -429,20 +494,20 @@ export default function PatientOnboarding() {
         return;
       }
 
-      // Check for consent acceptance and file
-      if (!patientData.consentAccepted) {
+      // Check for research consent acceptance and file
+      if (researchConsent.dataUse && !researchConsentAccepted) {
         toast({
-          title: "Consent required",
-          description: "Please confirm that the patient has signed the consent form",
+          title: "Research consent confirmation required",
+          description: "Please confirm that the patient has signed the research consent form",
           variant: "destructive"
         });
         return;
       }
 
-      if (!patientData.consentFile) {
+      if (researchConsent.dataUse && !researchConsentFile) {
         toast({
-          title: "Signed consent form required",
-          description: "Please upload the signed consent form",
+          title: "Signed research consent form required",
+          description: "Please upload the signed research consent form",
           variant: "destructive"
         });
         return;
@@ -493,7 +558,7 @@ export default function PatientOnboarding() {
         return;
       }
 
-      // Create FormData to handle file upload
+      // Create FormData to handle file uploads
       const formData = new FormData();
       
       // Add patient data
@@ -510,30 +575,28 @@ export default function PatientOnboarding() {
       formData.append('allergies', patientData.allergies || '');
       formData.append('currentMedications', patientData.current_medications || '');
       
-      // Add consent information
+      // Add patient consent information
       formData.append('consentAccepted', patientData.consentAccepted.toString());
       formData.append('consentDate', new Date().toISOString());
-      
-      // Add the consent file
       formData.append('consentFile', patientData.consentFile);
       
-      // Add enhanced consent data
+      // Add research consent information
       formData.append('researchConsent', researchConsent.dataUse.toString());
       formData.append('researchConsentDate', researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : '');
       formData.append('futureContactConsent', researchConsent.futureContact.toString());
       formData.append('anonymizedDataConsent', researchConsent.anonymizedData.toString());
-      formData.append('sampleStorageConsent', sampleStorage.storeSamples.toString());
-      formData.append('sampleTypes', sampleStorage.sampleTypes.join(','));
-      formData.append('storageDuration', sampleStorage.storageDuration);
-      formData.append('futureResearchUseConsent', sampleStorage.futureResearchUse.toString());
-      formData.append('destructionConsent', sampleStorage.destructionConsent.toString());
+      
+      // Add research consent file if exists
+      if (researchConsentFile) {
+        formData.append('researchConsentFile', researchConsentFile);
+      }
       
       // System fields
       formData.append('registrationDate', new Date().toISOString());
       formData.append('status', "active");
       formData.append('lastUpdated', new Date().toISOString());
 
-      console.log('🚀 Submitting form data with file:', patientData.consentFile.name);
+      console.log('🚀 Submitting form data with files');
       
       // You'll need to update your addPatient function to handle FormData
       await addPatient(formData);
@@ -543,20 +606,14 @@ export default function PatientOnboarding() {
         dataUse: false,
         futureContact: false,
         anonymizedData: false,
-        specificStudies: [],
         consentDate: null
       });
-      setSampleStorage({
-        storeSamples: false,
-        sampleTypes: [],
-        storageDuration: "5years",
-        futureResearchUse: false,
-        destructionConsent: false
-      });
+      setResearchConsentFile(null);
+      setResearchConsentAccepted(false);
 
       toast({
         title: "Patient registered successfully",
-        description: "Patient information and signed consent form have been stored.",
+        description: "Patient information and signed consent forms have been stored.",
         variant: "default"
       });
 
@@ -587,23 +644,6 @@ export default function PatientOnboarding() {
     // The patientData now includes consentAccepted and consentFile
     await handleSubmitWithConsent(patientData);
   };
-
-  // Enhanced sample type options
-  const sampleTypeOptions = [
-    { value: "Blood", description: "Whole blood, plasma, serum" },
-    { value: "Tissue", description: "Biopsy samples, surgical specimens" },
-    { value: "DNA/RNA", description: "Genetic material for sequencing" },
-    { value: "Urine", description: "Urine samples for analysis" },
-    { value: "Saliva", description: "Saliva and oral samples" },
-    { value: "Other Biofluids", description: "CSF, synovial fluid, etc." }
-  ];
-
-  const storageDurationOptions = [
-    { value: "5years", label: "5 Years" },
-    { value: "10years", label: "10 Years" },
-    { value: "indefinite", label: "Indefinite" },
-    { value: "studyend", label: "Until Study Completion" }
-  ];
 
   const statusOptions = [
     { value: "all", label: "All Patients" },
@@ -732,70 +772,31 @@ export default function PatientOnboarding() {
             </CardContent>
           </Card>
 
-          {/* Enhanced Consent Sections */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gradient-card shadow-card border-l-4 border-l-blue-500">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-blue-500" />
-                  Research Data Consent
-                </CardTitle>
-                <CardDescription>
-                  Patient consent for using health data in research studies
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <EnhancedConsentSection
-                  consent={researchConsent}
-                  onChange={handleResearchConsentChange}
-                  loading={loading}
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-card shadow-card border-l-4 border-l-green-500">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TestTube className="w-5 h-5 text-green-500" />
-                  Biological Sample Storage
-                </CardTitle>
-                <CardDescription>
-                  Consent for storing and using biological samples in research
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <EnhancedSampleStorageSection
-                  storage={sampleStorage}
-                  onChange={handleSampleStorageChange}
-                  onSampleTypeToggle={handleSampleTypeToggle}
-                  loading={loading}
-                  sampleTypeOptions={sampleTypeOptions}
-                  storageDurationOptions={storageDurationOptions}
-                />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Enhanced Consent Summary */}
-          {(researchConsent.dataUse || sampleStorage.storeSamples) && (
-            <Card className="bg-gradient-card shadow-card border-l-4 border-l-purple-500">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="w-5 h-5 text-purple-500" />
-                  Consent Summary
-                </CardTitle>
-                <CardDescription>
-                  Overview of patient consent preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <EnhancedConsentSummary
-                  researchConsent={researchConsent}
-                  sampleStorage={sampleStorage}
-                />
-              </CardContent>
-            </Card>
-          )}
+          {/* Enhanced Research Data Consent Section Only */}
+          <Card className="bg-gradient-card shadow-card border-l-4 border-l-blue-500">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-blue-500" />
+                Research Data Consent
+              </CardTitle>
+              <CardDescription>
+                Patient consent for using health data in research studies
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <EnhancedResearchConsentSection
+                consent={researchConsent}
+                onChange={handleResearchConsentChange}
+                loading={loading}
+                onDownloadConsent={handleDownloadResearchConsentForm}
+                consentFile={researchConsentFile}
+                onFileUpload={handleResearchConsentFileUpload}
+                onRemoveFile={handleRemoveResearchConsentFile}
+                onConsentAcceptedChange={setResearchConsentAccepted}
+                consentAccepted={researchConsentAccepted}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="search" className="space-y-6">
