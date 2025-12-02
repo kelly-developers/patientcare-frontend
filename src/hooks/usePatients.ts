@@ -1,4 +1,3 @@
-// hooks/usePatients.ts
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { patientsService, Patient, CreatePatientRequest } from '@/services/patientsService';
@@ -38,62 +37,41 @@ export const usePatients = () => {
     }
   };
 
-  // Updated to handle both FormData and regular object
-  const addPatient = async (patientData: CreatePatientRequest | FormData) => {
+  const addPatient = async (patientData: CreatePatientRequest) => {
     try {
       setLoading(true);
       setError(null);
       
       console.log('📝 Creating patient:', patientData);
       
-      // Handle FormData - extract to object
-      let processedData: CreatePatientRequest;
+      // Validate required fields
+      const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'gender'];
+      const missingFields = requiredFields.filter(field => !patientData[field as keyof CreatePatientRequest]);
       
-      if (patientData instanceof FormData) {
-        // Extract data from FormData
-        processedData = {
-          firstName: patientData.get('firstName') as string || '',
-          lastName: patientData.get('lastName') as string || '',
-          dateOfBirth: patientData.get('dateOfBirth') as string,
-          gender: patientData.get('gender') as string,
-          phone: patientData.get('phone') as string || '',
-          email: patientData.get('email') as string || '',
-          address: patientData.get('address') as string || '',
-          emergencyContactName: patientData.get('emergencyContactName') as string || '',
-          emergencyContactPhone: patientData.get('emergencyContactPhone') as string || '',
-          medicalHistory: patientData.get('medicalHistory') as string || '',
-          allergies: patientData.get('allergies') as string || '',
-          currentMedications: patientData.get('currentMedications') as string || '',
-          consentAccepted: patientData.get('consentAccepted') === 'true',
-          consentFormPath: patientData.get('consentFormPath') as string || '',
-          researchConsent: patientData.get('researchConsent') === 'true',
-          sampleStorageConsent: false, // Default value
-        };
-        
-        console.log('📝 Extracted data from FormData:', processedData);
-      } else {
-        processedData = patientData;
-      }
-      
-      // Enhanced validation
-      if (!processedData.firstName || !processedData.lastName || !processedData.dateOfBirth || !processedData.gender) {
-        throw new Error('Missing required fields: firstName, lastName, dateOfBirth, gender');
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      if (!processedData.consentAccepted) {
+      if (!patientData.consentAccepted) {
         throw new Error('Consent must be accepted to register patient');
       }
 
-      // Validate date
-      const dob = new Date(processedData.dateOfBirth);
+      // Validate date format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(patientData.dateOfBirth)) {
+        throw new Error('Date of birth must be in YYYY-MM-DD format');
+      }
+
+      // Validate date is not in future
+      const dobDate = new Date(patientData.dateOfBirth);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      if (dob > today) {
+      if (dobDate > today) {
         throw new Error('Date of birth cannot be in the future');
       }
 
-      const newPatient = await patientsService.create(processedData);
+      const newPatient = await patientsService.create(patientData);
       
       setPatients(prev => [newPatient, ...prev]);
       
@@ -134,7 +112,6 @@ export const usePatients = () => {
       
       const updatedPatient = await patientsService.uploadConsentForm(patientId, file);
       
-      // Update patient in local state
       setPatients(prev => prev.map(patient => 
         patient.id === patientId ? updatedPatient : patient
       ));

@@ -36,7 +36,7 @@ import { usePatients } from "@/hooks/usePatients";
 import PatientForm from "@/components/PatientForm";
 import { Patient } from "@/services/patientsService";
 
-// Helper functions moved outside the component
+// Helper functions
 const hasResearchConsent = (patient: Patient) => {
   return patient?.researchConsent === true || 
          patient?.research_consent === true;
@@ -74,7 +74,7 @@ const getPatientStatus = (patient: Patient) => {
   return (patient as any)?.status || 'active';
 };
 
-// PatientCard component moved outside and uses the helper functions
+// PatientCard component
 const PatientCard = ({ patient, onViewDetails }: any) => {
   const hasResearch = hasResearchConsent(patient);
   const hasSamples = hasSampleStorage(patient);
@@ -121,7 +121,7 @@ const PatientCard = ({ patient, onViewDetails }: any) => {
   );
 };
 
-// Enhanced Research Data Consent Component with Download and Physical Signature
+// Enhanced Research Data Consent Component
 const EnhancedResearchConsentSection = ({ 
   consent, 
   onChange, 
@@ -138,14 +138,6 @@ const EnhancedResearchConsentSection = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type !== "application/pdf") {
-        // Handle error - should be done via toast in parent
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        // Handle error - should be done via toast in parent
-        return;
-      }
       onFileUpload(file);
       setFileUploaded(true);
     }
@@ -201,34 +193,6 @@ const EnhancedResearchConsentSection = ({
               <Label htmlFor="futureContact" className="text-sm">
                 I consent to being contacted about future research studies I may be eligible for
               </Label>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Consent Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                    disabled={loading}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {consent.consentDate ? (
-                      format(consent.consentDate, "PPP")
-                    ) : (
-                      <span>Select consent date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={consent.consentDate || undefined}
-                    onSelect={(date) => onChange("consentDate", date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
             </div>
 
             {/* Consent Form Download Section */}
@@ -363,7 +327,6 @@ export default function PatientOnboarding() {
   const { toast } = useToast();
   const { patients, addPatient, searchPatients, loading, error } = usePatients();
 
-  // Enhanced search with debouncing
   useEffect(() => {
     if (searchQuery.trim()) {
       const timer = setTimeout(() => {
@@ -416,7 +379,6 @@ export default function PatientOnboarding() {
   };
 
   const handleDownloadResearchConsentForm = () => {
-    // Generate research consent form content
     const consentContent = `
 RESEARCH DATA CONSENT FORM
 =============================
@@ -481,32 +443,9 @@ Date: ___________________
     try {
       console.log('📝 Submitting patient data:', patientData);
       
-      // Map snake_case to camelCase for backend
-      const mappedData = {
-        firstName: patientData.first_name || '',
-        lastName: patientData.last_name || '',
-        dateOfBirth: patientData.date_of_birth || '',
-        gender: patientData.gender || '',
-        phone: patientData.phone || '',
-        email: patientData.email || '',
-        address: patientData.address || '',
-        emergencyContactName: patientData.emergency_contact_name || '',
-        emergencyContactPhone: patientData.emergency_contact_phone || '',
-        medicalHistory: patientData.medical_history || '',
-        allergies: patientData.allergies || '',
-        currentMedications: patientData.current_medications || '',
-        consentAccepted: patientData.consentAccepted || false,
-        consentFormPath: patientData.consentFile?.name || '',
-        researchConsent: researchConsent.dataUse,
-        sampleStorageConsent: false,
-        anonymizedDataConsent: researchConsent.anonymizedData,
-        futureContactConsent: researchConsent.futureContact,
-        researchConsentDate: researchConsent.consentDate ? researchConsent.consentDate.toISOString() : null
-      };
-
-      // Enhanced validation
+      // Ensure required fields are present
       const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'gender'];
-      const missingFields = requiredFields.filter(field => !mappedData[field as keyof typeof mappedData]);
+      const missingFields = requiredFields.filter(field => !patientData[field]);
       
       if (missingFields.length > 0) {
         toast({
@@ -517,39 +456,44 @@ Date: ___________________
         return;
       }
 
-      // Check for research consent acceptance and file
-      if (researchConsent.dataUse && !researchConsentAccepted) {
+      // Prepare the data for backend
+      const backendData = {
+        firstName: patientData.firstName || patientData.first_name || '',
+        lastName: patientData.lastName || patientData.last_name || '',
+        dateOfBirth: patientData.dateOfBirth || patientData.date_of_birth || '',
+        gender: patientData.gender || '',
+        phone: patientData.phone || '',
+        email: patientData.email || '',
+        address: patientData.address || '',
+        emergencyContactName: patientData.emergencyContactName || patientData.emergency_contact_name || '',
+        emergencyContactPhone: patientData.emergencyContactPhone || patientData.emergency_contact_phone || '',
+        medicalHistory: patientData.medicalHistory || patientData.medical_history || '',
+        allergies: patientData.allergies || '',
+        currentMedications: patientData.currentMedications || patientData.current_medications || '',
+        consentAccepted: patientData.consentAccepted || false,
+        consentFormPath: patientData.consentFormPath || patientData.consentFile?.name || '',
+        researchConsent: researchConsent.dataUse,
+        sampleStorageConsent: false,
+        anonymizedDataConsent: researchConsent.anonymizedData,
+        futureContactConsent: researchConsent.futureContact
+      };
+
+      // Validate date format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(backendData.dateOfBirth)) {
         toast({
-          title: "Research consent confirmation required",
-          description: "Please confirm that the patient has signed the research consent form",
+          title: "Invalid date format",
+          description: "Date of birth must be in YYYY-MM-DD format",
           variant: "destructive"
         });
         return;
       }
 
-      if (researchConsent.dataUse && !researchConsentFile) {
-        toast({
-          title: "Signed research consent form required",
-          description: "Please upload the signed research consent form",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Enhanced date validation
-      const dobDate = new Date(mappedData.dateOfBirth);
+      // Validate date is not in future
+      const dobDate = new Date(backendData.dateOfBirth);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      if (isNaN(dobDate.getTime())) {
-        toast({
-          title: "Invalid date format",
-          description: "Please enter a valid date of birth in YYYY-MM-DD format",
-          variant: "destructive"
-        });
-        return;
-      }
-
       if (dobDate > today) {
         toast({
           title: "Invalid date of birth",
@@ -559,32 +503,9 @@ Date: ___________________
         return;
       }
 
-      // Validate age
-      const ageInMs = today.getTime() - dobDate.getTime();
-      const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
+      console.log('🚀 Submitting to backend:', backendData);
       
-      if (ageInYears > 120) {
-        toast({
-          title: "Invalid age",
-          description: "Patient age appears to be over 120 years. Please check the date of birth.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      if (ageInYears < 0) {
-        toast({
-          title: "Invalid date",
-          description: "Date of birth cannot be in the future",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      console.log('🚀 Submitting patient data to backend:', mappedData);
-      
-      // Call addPatient with the mapped JSON data (not FormData)
-      await addPatient(mappedData);
+      await addPatient(backendData);
       
       // Reset forms only on success
       setResearchConsent({
@@ -605,28 +526,26 @@ Date: ___________________
       // Switch to recent tab to show the new patient
       setActiveTab("recent");
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error submitting patient data:", error);
       
-      // Enhanced error handling
-      if (error instanceof Error) {
-        toast({
-          title: "Registration failed",
-          description: error.message || "An unexpected error occurred. Please try again.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Registration failed",
-          description: "Unable to register patient. Please check your connection and try again.",
-          variant: "destructive"
-        });
+      let errorMessage = "Unable to register patient. Please check your connection and try again.";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
+      
+      toast({
+        title: "Registration failed",
+        description: errorMessage,
+        variant: "destructive"
+      });
     }
   };
 
   const handlePatientFormSubmit = async (patientData: any) => {
-    // The patientData now includes consentAccepted and consentFile
     await handleSubmitWithConsent(patientData);
   };
 
@@ -637,19 +556,16 @@ Date: ___________________
     { value: "pending", label: "Pending Review" }
   ];
 
-  // Filter patients based on status
   const filteredPatients = patients.filter(patient => {
     if (filterStatus === "all") return true;
     return getPatientStatus(patient) === filterStatus;
   });
 
-  // Export functionality
   const handleExportPatients = () => {
     toast({
       title: "Export initiated",
       description: "Patient data export has been started.",
     });
-    // Implement export logic here
   };
 
   return (

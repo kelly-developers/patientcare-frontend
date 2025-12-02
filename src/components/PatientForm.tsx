@@ -14,18 +14,18 @@ import { CalendarIcon, Download, Upload, FileText, CheckCircle } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 
 interface PatientFormData {
-  first_name: string;
-  last_name: string;
-  date_of_birth: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
   gender: string;
   phone: string;
   email: string;
   address: string;
-  emergency_contact_name: string;
-  emergency_contact_phone: string;
-  medical_history: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  medicalHistory: string;
   allergies: string;
-  current_medications: string;
+  currentMedications: string;
 }
 
 interface PatientFormProps {
@@ -35,18 +35,18 @@ interface PatientFormProps {
 
 export default function PatientForm({ onSubmit, isLoading = false }: PatientFormProps) {
   const [formData, setFormData] = useState<PatientFormData>({
-    first_name: "",
-    last_name: "",
-    date_of_birth: "",
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
     gender: "",
     phone: "",
     email: "",
     address: "",
-    emergency_contact_name: "",
-    emergency_contact_phone: "",
-    medical_history: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    medicalHistory: "",
     allergies: "",
-    current_medications: "",
+    currentMedications: "",
   });
 
   const [date, setDate] = useState<Date>();
@@ -63,7 +63,7 @@ export default function PatientForm({ onSubmit, isLoading = false }: PatientForm
     if (selectedDate) {
       setDate(selectedDate);
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      handleInputChange("date_of_birth", formattedDate);
+      handleInputChange("dateOfBirth", formattedDate);
     }
   };
 
@@ -78,7 +78,7 @@ export default function PatientForm({ onSubmit, isLoading = false }: PatientForm
         });
         return;
       }
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      if (file.size > 10 * 1024 * 1024) {
         toast({
           title: "File too large",
           description: "Maximum file size is 10MB",
@@ -96,10 +96,9 @@ export default function PatientForm({ onSubmit, isLoading = false }: PatientForm
   };
 
   const downloadConsentForm = () => {
-    // Generate a pre-filled consent form with patient information
     const consentData = {
-      patientName: `${formData.first_name} ${formData.last_name}`,
-      dateOfBirth: formData.date_of_birth,
+      patientName: `${formData.firstName} ${formData.lastName}`,
+      dateOfBirth: formData.dateOfBirth,
       gender: formData.gender,
       phone: formData.phone,
       email: formData.email,
@@ -107,7 +106,6 @@ export default function PatientForm({ onSubmit, isLoading = false }: PatientForm
       date: new Date().toISOString().split('T')[0]
     };
     
-    // Create a downloadable PDF (this is a simplified version - you would use a PDF library in production)
     const consentFormContent = `
 CONSENT FORM
 =======================
@@ -157,7 +155,7 @@ NOTES:
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Consent-Form-${formData.first_name}-${formData.last_name}.txt`;
+    link.download = `Consent-Form-${formData.firstName}-${formData.lastName}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -181,43 +179,45 @@ NOTES:
       return;
     }
 
-    if (!consentFile) {
-      toast({
-        title: "Signed consent form required",
-        description: "Please download, sign, and upload the consent form",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const requiredFields = ['first_name', 'last_name', 'date_of_birth', 'gender'];
+    const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'gender'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof PatientFormData]);
     
     if (missingFields.length > 0) {
       toast({
         title: "Missing required information",
-        description: `Please fill in: ${missingFields.join(', ').replace(/_/g, ' ')}`,
+        description: `Please fill in: ${missingFields.join(', ')}`,
         variant: "destructive",
       });
       return;
     }
 
-    // Convert snake_case to camelCase for backend
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(formData.dateOfBirth)) {
+      toast({
+        title: "Invalid date format",
+        description: "Date of birth must be in YYYY-MM-DD format",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prepare data for backend
     const processedData = {
-      firstName: formData.first_name,
-      lastName: formData.last_name,
-      dateOfBirth: formData.date_of_birth,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      dateOfBirth: formData.dateOfBirth,
       gender: formData.gender,
       phone: formData.phone,
       email: formData.email,
       address: formData.address,
-      emergencyContactName: formData.emergency_contact_name,
-      emergencyContactPhone: formData.emergency_contact_phone,
-      medicalHistory: formData.medical_history,
+      emergencyContactName: formData.emergencyContactName,
+      emergencyContactPhone: formData.emergencyContactPhone,
+      medicalHistory: formData.medicalHistory,
       allergies: formData.allergies,
-      currentMedications: formData.current_medications,
-      consentAccepted,
-      consentFile
+      currentMedications: formData.currentMedications,
+      consentAccepted: consentAccepted,
+      consentFormPath: consentFile?.name || "",
     };
 
     onSubmit(processedData);
@@ -239,21 +239,21 @@ NOTES:
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="first_name">First Name *</Label>
+              <Label htmlFor="firstName">First Name *</Label>
               <Input
-                id="first_name"
-                value={formData.first_name}
-                onChange={(e) => handleInputChange("first_name", e.target.value)}
+                id="firstName"
+                value={formData.firstName}
+                onChange={(e) => handleInputChange("firstName", e.target.value)}
                 placeholder="John"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="last_name">Last Name *</Label>
+              <Label htmlFor="lastName">Last Name *</Label>
               <Input
-                id="last_name"
-                value={formData.last_name}
-                onChange={(e) => handleInputChange("last_name", e.target.value)}
+                id="lastName"
+                value={formData.lastName}
+                onChange={(e) => handleInputChange("lastName", e.target.value)}
                 placeholder="Doe"
                 required
               />
@@ -262,7 +262,7 @@ NOTES:
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="date_of_birth">Date of Birth *</Label>
+              <Label htmlFor="dateOfBirth">Date of Birth *</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -285,11 +285,16 @@ NOTES:
                 </PopoverContent>
               </Popover>
               <Input
-                id="date_of_birth"
-                type="hidden"
-                value={formData.date_of_birth}
+                id="dateOfBirth"
+                type="text"
+                value={formData.dateOfBirth}
+                onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                placeholder="YYYY-MM-DD"
                 required
+                pattern="\d{4}-\d{2}-\d{2}"
+                className="mt-2"
               />
+              <p className="text-xs text-muted-foreground">Format: YYYY-MM-DD</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="gender">Gender *</Label>
@@ -361,21 +366,21 @@ NOTES:
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
+              <Label htmlFor="emergencyContactName">Emergency Contact Name</Label>
               <Input
-                id="emergency_contact_name"
-                value={formData.emergency_contact_name}
-                onChange={(e) => handleInputChange("emergency_contact_name", e.target.value)}
+                id="emergencyContactName"
+                value={formData.emergencyContactName}
+                onChange={(e) => handleInputChange("emergencyContactName", e.target.value)}
                 placeholder="Contact person name"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="emergency_contact_phone">Emergency Contact Phone</Label>
+              <Label htmlFor="emergencyContactPhone">Emergency Contact Phone</Label>
               <Input
-                id="emergency_contact_phone"
+                id="emergencyContactPhone"
                 type="tel"
-                value={formData.emergency_contact_phone}
-                onChange={(e) => handleInputChange("emergency_contact_phone", e.target.value)}
+                value={formData.emergencyContactPhone}
+                onChange={(e) => handleInputChange("emergencyContactPhone", e.target.value)}
                 placeholder="+254700000000"
               />
             </div>
@@ -390,11 +395,11 @@ NOTES:
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="medical_history">Medical History</Label>
+            <Label htmlFor="medicalHistory">Medical History</Label>
             <Textarea
-              id="medical_history"
-              value={formData.medical_history}
-              onChange={(e) => handleInputChange("medical_history", e.target.value)}
+              id="medicalHistory"
+              value={formData.medicalHistory}
+              onChange={(e) => handleInputChange("medicalHistory", e.target.value)}
               placeholder="Previous medical conditions, surgeries, etc."
               rows={3}
             />
@@ -410,11 +415,11 @@ NOTES:
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="current_medications">Current Medications</Label>
+            <Label htmlFor="currentMedications">Current Medications</Label>
             <Textarea
-              id="current_medications"
-              value={formData.current_medications}
-              onChange={(e) => handleInputChange("current_medications", e.target.value)}
+              id="currentMedications"
+              value={formData.currentMedications}
+              onChange={(e) => handleInputChange("currentMedications", e.target.value)}
               placeholder="Current medications and dosages"
               rows={2}
             />
@@ -422,7 +427,7 @@ NOTES:
         </CardContent>
       </Card>
 
-      {/* Consent Section - Physical Signature Process */}
+      {/* Consent Section */}
       <Card className="border-l-4 border-l-blue-500">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -459,7 +464,7 @@ NOTES:
                 type="button"
                 onClick={downloadConsentForm}
                 className="whitespace-nowrap"
-                disabled={!formData.first_name || !formData.last_name}
+                disabled={!formData.firstName || !formData.lastName}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download Form
