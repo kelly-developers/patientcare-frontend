@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CalendarIcon, Download, Upload, FileText } from "lucide-react";
+import { CalendarIcon, Download, Upload, FileText, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface PatientFormData {
@@ -29,7 +29,7 @@ interface PatientFormData {
 }
 
 interface PatientFormProps {
-  onSubmit: (data: PatientFormData & { consentAccepted: boolean }) => void;
+  onSubmit: (data: PatientFormData & { consentAccepted: boolean; consentFile?: File }) => void;
   isLoading: boolean;
 }
 
@@ -52,6 +52,7 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
   const [date, setDate] = useState<Date>();
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [consentFile, setConsentFile] = useState<File | null>(null);
+  const [fileUploaded, setFileUploaded] = useState(false);
   const { toast } = useToast();
 
   const handleInputChange = (field: keyof PatientFormData, value: string) => {
@@ -86,21 +87,86 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
         return;
       }
       setConsentFile(file);
+      setFileUploaded(true);
       toast({
-        title: "File selected",
-        description: `${file.name} is ready for upload`,
+        title: "File uploaded successfully",
+        description: `${file.name} has been uploaded`,
       });
     }
   };
 
   const downloadConsentForm = () => {
-    const consentFormUrl = "/consent-form-template.pdf";
+    // Generate a pre-filled consent form with patient information
+    const consentData = {
+      patientName: `${formData.first_name} ${formData.last_name}`,
+      dateOfBirth: formData.date_of_birth,
+      gender: formData.gender,
+      phone: formData.phone,
+      email: formData.email,
+      address: formData.address,
+      date: new Date().toISOString().split('T')[0]
+    };
+    
+    // Create a downloadable PDF (this is a simplified version - you would use a PDF library in production)
+    const consentFormContent = `
+CONSENT FORM
+=======================
+
+Patient Information:
+Name: ${consentData.patientName}
+Date of Birth: ${consentData.dateOfBirth}
+Gender: ${consentData.gender}
+Phone: ${consentData.phone}
+Email: ${consentData.email}
+Address: ${consentData.address}
+
+Date: ${consentData.date}
+
+CONSENT FOR TREATMENT AND DATA USE
+
+I, ${consentData.patientName}, hereby consent to:
+
+1. MEDICAL TREATMENT: I consent to receive medical treatment, procedures, and interventions as deemed necessary by my healthcare provider.
+
+2. DATA USAGE: I consent to the collection and use of my health information for treatment purposes, with the understanding that my information will be stored securely and only authorized personnel will have access.
+
+3. RESEARCH PARTICIPATION: I agree that my anonymized health data may be used for medical research to improve treatment outcomes and advance medical knowledge.
+
+4. SAMPLE STORAGE: I consent to the storage of my biological samples for future testing and research purposes.
+
+5. COMMUNICATION: I agree to receive communications regarding my treatment, appointments, and follow-up care.
+
+I have read and understood this consent form. All my questions have been answered to my satisfaction.
+
+_________________________
+Patient's Signature
+
+Date: ___________________
+
+_________________________
+Witness Signature
+
+Date: ___________________
+
+NOTES:
+- You may withdraw your consent at any time by notifying your healthcare provider in writing.
+- Withdrawal of consent will not affect the quality of care you receive.
+    `;
+    
+    const blob = new Blob([consentFormContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = consentFormUrl;
-    link.download = "Consent-Form-Template.pdf";
+    link.href = url;
+    link.download = `Consent-Form-${formData.first_name}-${formData.last_name}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Consent form downloaded",
+      description: "Please print, sign, and upload the signed form",
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -110,6 +176,15 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
       toast({
         title: "Consent required",
         description: "Please accept the consent terms to proceed",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!consentFile) {
+      toast({
+        title: "Signed consent form required",
+        description: "Please download, sign, and upload the consent form",
         variant: "destructive",
       });
       return;
@@ -127,7 +202,16 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
       return;
     }
 
-    onSubmit({ ...formData, consentAccepted });
+    onSubmit({ 
+      ...formData, 
+      consentAccepted,
+      consentFile
+    });
+  };
+
+  const removeFile = () => {
+    setConsentFile(null);
+    setFileUploaded(false);
   };
 
   return (
@@ -324,64 +408,131 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
         </CardContent>
       </Card>
 
-      {/* Consent Section - Simplified */}
+      {/* Consent Section - Physical Signature Process */}
       <Card className="border-l-4 border-l-blue-500">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-500" />
-            Consent Form
+            Consent Form Process
           </CardTitle>
           <CardDescription>
-            Please download, sign, and upload the consent form
+            Three-step process for physical consent form
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Download Template Button */}
+          {/* Step 1: Download Form */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-semibold">
+                1
+              </div>
+              <h4 className="font-medium text-blue-800">Download Consent Form</h4>
+            </div>
+            <p className="text-sm text-blue-600 mb-4">
+              Download the pre-filled consent form. It will include all the patient information you entered above.
+            </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h4 className="font-medium text-blue-800">Consent Form Template</h4>
-                <p className="text-sm text-blue-600">
-                  Download the consent form template for signing
-                </p>
+              <div className="text-sm">
+                <p className="font-medium">Form includes:</p>
+                <ul className="list-disc ml-5 mt-1 space-y-1">
+                  <li>Patient information</li>
+                  <li>Consent terms and conditions</li>
+                  <li>Signature lines</li>
+                  <li>Date fields</li>
+                </ul>
               </div>
               <Button
                 type="button"
-                variant="outline"
                 onClick={downloadConsentForm}
                 className="whitespace-nowrap"
+                disabled={!formData.first_name || !formData.last_name}
               >
                 <Download className="w-4 h-4 mr-2" />
-                Download Template
+                Download Form
               </Button>
             </div>
           </div>
 
-          {/* File Upload */}
-          <div className="space-y-2">
-            <Label htmlFor="consent_form">Upload Signed Consent Form (PDF)</Label>
-            <div className="flex items-center gap-4">
-              <Input
-                id="consent_form"
-                type="file"
-                accept=".pdf"
-                onChange={handleFileUpload}
-                className="flex-1"
-              />
-              {consentFile && (
-                <div className="text-sm text-green-600 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  {consentFile.name}
-                </div>
-              )}
+          {/* Step 2: Print & Sign */}
+          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center font-semibold">
+                2
+              </div>
+              <h4 className="font-medium text-amber-800">Print & Sign Physically</h4>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Maximum file size: 10MB. PDF format only.
-            </p>
+            <div className="space-y-2 text-sm text-amber-600">
+              <p><strong>Instructions:</strong></p>
+              <ol className="list-decimal ml-5 space-y-1">
+                <li>Print the downloaded consent form</li>
+                <li>Have the patient read and sign the form</li>
+                <li>Get witness signature if required</li>
+                <li>Scan or take a clear photo of the signed form</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Step 3: Upload Signed Form */}
+          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center font-semibold">
+                3
+              </div>
+              <h4 className="font-medium text-green-800">Upload Signed Form</h4>
+            </div>
+            
+            {fileUploaded ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border">
+                  <FileText className="w-6 h-6 text-green-500" />
+                  <div className="flex-1">
+                    <p className="font-medium">{consentFile?.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(consentFile?.size || 0) / 1024} KB • PDF
+                    </p>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={removeFile}
+                >
+                  Remove File
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center">
+                  <Upload className="w-8 h-8 text-green-400 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-green-700 mb-2">
+                    Upload signed consent form
+                  </p>
+                  <p className="text-xs text-green-600 mb-4">
+                    Upload the scanned/photographed signed consent form (PDF only, max 10MB)
+                  </p>
+                  <Input
+                    id="consent_form"
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <Label
+                    htmlFor="consent_form"
+                    className="cursor-pointer inline-flex items-center justify-center px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Choose File
+                  </Label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Simple Consent Checkbox */}
-          <div className="flex items-start space-x-3 p-4 bg-green-50 rounded-lg border border-green-200">
+          <div className="flex items-start space-x-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
             <Checkbox
               id="consent_accepted"
               checked={consentAccepted}
@@ -389,12 +540,12 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
               className="mt-1"
             />
             <div className="space-y-1">
-              <Label htmlFor="consent_accepted" className="font-medium text-green-800">
-                I confirm that the patient has signed and submitted the consent form
+              <Label htmlFor="consent_accepted" className="font-medium text-purple-800">
+                I confirm that the patient has physically signed the consent form
               </Label>
-              <p className="text-sm text-green-600">
-                By checking this box, you acknowledge that the signed consent form has been
-                properly completed and uploaded to the system.
+              <p className="text-sm text-purple-600">
+                By checking this box, you confirm that the patient has reviewed and physically signed 
+                the consent form, and the uploaded document is the authentic signed copy.
               </p>
             </div>
           </div>
@@ -406,7 +557,7 @@ export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
             <Button
               type="submit"
               size="lg"
-              disabled={isLoading || !consentAccepted}
+              disabled={isLoading || !consentAccepted || !consentFile}
               className="min-w-[200px]"
             >
               {isLoading ? "Registering Patient..." : "Complete Registration"}

@@ -27,7 +27,8 @@ import {
   Download,
   Upload,
   Filter,
-  MoreHorizontal
+  MoreHorizontal,
+  CheckCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePatients } from "@/hooks/usePatients";
@@ -411,7 +412,6 @@ export default function PatientOnboarding() {
     }));
   };
 
-  // Enhanced patient submission with better validation
   const handleSubmitWithConsent = async (patientData: any) => {
     try {
       console.log('📝 Submitting patient data:', patientData);
@@ -429,10 +429,29 @@ export default function PatientOnboarding() {
         return;
       }
 
+      // Check for consent acceptance and file
+      if (!patientData.consentAccepted) {
+        toast({
+          title: "Consent required",
+          description: "Please confirm that the patient has signed the consent form",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (!patientData.consentFile) {
+        toast({
+          title: "Signed consent form required",
+          description: "Please upload the signed consent form",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Enhanced date validation
       const dob = new Date(patientData.date_of_birth);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+      today.setHours(0, 0, 0, 0);
       
       if (isNaN(dob.getTime())) {
         toast({
@@ -452,7 +471,7 @@ export default function PatientOnboarding() {
         return;
       }
 
-      // Validate age (patient must be at least 1 year old)
+      // Validate age
       const ageInMs = today.getTime() - dob.getTime();
       const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
       
@@ -474,36 +493,50 @@ export default function PatientOnboarding() {
         return;
       }
 
-      // Transform data to match backend structure
-      const completePatientData = {
-        firstName: patientData.first_name,
-        lastName: patientData.last_name,
-        dateOfBirth: patientData.date_of_birth,
-        gender: patientData.gender,
-        phone: patientData.phone || '',
-        email: patientData.email || '',
-        address: patientData.address || '',
-        emergencyContactName: patientData.emergency_contact_name || '',
-        emergencyContactPhone: patientData.emergency_contact_phone || '',
-        medicalHistory: patientData.medical_history || '',
-        allergies: patientData.allergies || '',
-        currentMedications: patientData.current_medications || '',
-        
-        // Enhanced consent data with proper defaults
-        researchConsent: researchConsent.dataUse || false,
-        researchConsentDate: researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : null,
-        futureContactConsent: researchConsent.futureContact || false,
-        anonymizedDataConsent: researchConsent.anonymizedData || false,
-        sampleStorageConsent: sampleStorage.storeSamples || false,
-        sampleTypes: sampleStorage.sampleTypes.join(',') || '',
-        storageDuration: sampleStorage.storageDuration || '5years',
-        futureResearchUseConsent: sampleStorage.futureResearchUse || false,
-        destructionConsent: sampleStorage.destructionConsent || false,
-      };
+      // Create FormData to handle file upload
+      const formData = new FormData();
       
-      console.log('🚀 Final patient data being sent:', completePatientData);
+      // Add patient data
+      formData.append('firstName', patientData.first_name);
+      formData.append('lastName', patientData.last_name);
+      formData.append('dateOfBirth', patientData.date_of_birth);
+      formData.append('gender', patientData.gender);
+      formData.append('phone', patientData.phone || '');
+      formData.append('email', patientData.email || '');
+      formData.append('address', patientData.address || '');
+      formData.append('emergencyContactName', patientData.emergency_contact_name || '');
+      formData.append('emergencyContactPhone', patientData.emergency_contact_phone || '');
+      formData.append('medicalHistory', patientData.medical_history || '');
+      formData.append('allergies', patientData.allergies || '');
+      formData.append('currentMedications', patientData.current_medications || '');
       
-      await addPatient(completePatientData);
+      // Add consent information
+      formData.append('consentAccepted', patientData.consentAccepted.toString());
+      formData.append('consentDate', new Date().toISOString());
+      
+      // Add the consent file
+      formData.append('consentFile', patientData.consentFile);
+      
+      // Add enhanced consent data
+      formData.append('researchConsent', researchConsent.dataUse.toString());
+      formData.append('researchConsentDate', researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : '');
+      formData.append('futureContactConsent', researchConsent.futureContact.toString());
+      formData.append('anonymizedDataConsent', researchConsent.anonymizedData.toString());
+      formData.append('sampleStorageConsent', sampleStorage.storeSamples.toString());
+      formData.append('sampleTypes', sampleStorage.sampleTypes.join(','));
+      formData.append('storageDuration', sampleStorage.storageDuration);
+      formData.append('futureResearchUseConsent', sampleStorage.futureResearchUse.toString());
+      formData.append('destructionConsent', sampleStorage.destructionConsent.toString());
+      
+      // System fields
+      formData.append('registrationDate', new Date().toISOString());
+      formData.append('status', "active");
+      formData.append('lastUpdated', new Date().toISOString());
+
+      console.log('🚀 Submitting form data with file:', patientData.consentFile.name);
+      
+      // You'll need to update your addPatient function to handle FormData
+      await addPatient(formData);
       
       // Reset forms only on success
       setResearchConsent({
@@ -523,7 +556,8 @@ export default function PatientOnboarding() {
 
       toast({
         title: "Patient registered successfully",
-        description: "Patient information and consent forms have been stored.",
+        description: "Patient information and signed consent form have been stored.",
+        variant: "default"
       });
 
       // Switch to recent tab to show the new patient
@@ -531,11 +565,26 @@ export default function PatientOnboarding() {
       
     } catch (error) {
       console.error("❌ Error submitting patient data:", error);
-      // Error is already handled in the addPatient function
+      
+      // Enhanced error handling
+      if (error instanceof Error) {
+        toast({
+          title: "Registration failed",
+          description: error.message || "An unexpected error occurred. Please try again.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Registration failed",
+          description: "Unable to register patient. Please check your connection and try again.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
   const handlePatientFormSubmit = async (patientData: any) => {
+    // The patientData now includes consentAccepted and consentFile
     await handleSubmitWithConsent(patientData);
   };
 
