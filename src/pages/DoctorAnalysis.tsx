@@ -12,8 +12,9 @@ import {
   User, 
   CheckCircle,
   Loader2,
-  Scalpel,
-  TestTube
+  Scissors, // ✅ Changed from Scalpel to Scissors
+  TestTube,
+  AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -43,6 +44,17 @@ export default function DoctorAnalysis() {
   });
   const { toast } = useToast();
 
+  // Get current doctor ID from localStorage or context
+  const getCurrentDoctorId = (): number => {
+    try {
+      const user = JSON.parse(localStorage.getItem('patientcare_user') || '{}');
+      return user?.id || 1; // Default to doctor ID 1 if not found
+    } catch (error) {
+      console.error('Error getting current doctor ID:', error);
+      return 1; // Default fallback
+    }
+  };
+
   useEffect(() => {
     loadAnalyses();
   }, []);
@@ -60,11 +72,14 @@ export default function DoctorAnalysis() {
       setAnalyses(data);
     } catch (error: any) {
       console.error('Error loading analyses:', error);
+      const errorMessage = error.response?.data?.message || error.message || "Failed to load analyses";
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to load analyses",
+        description: errorMessage,
         variant: "destructive",
       });
+      // Set empty array on error
+      setAnalyses([]);
     } finally {
       setLoading(false);
     }
@@ -85,14 +100,18 @@ export default function DoctorAnalysis() {
   };
 
   const getPatientAge = (dateOfBirth: string) => {
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
+    try {
+      const today = new Date();
+      const birthDate = new Date(dateOfBirth);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    } catch (error) {
+      return 0;
     }
-    return age;
   };
 
   const handleAnalysisSubmit = async () => {
@@ -126,10 +145,8 @@ export default function DoctorAnalysis() {
     setSubmitting(true);
 
     try {
-      // Get current doctor ID from localStorage or auth context
-      // For now, using a default doctor ID - replace with actual auth context
-      const doctorId = 1; // TODO: Get from auth context
-
+      const doctorId = getCurrentDoctorId();
+      
       const requestData: CreateAnalysisRequest = {
         patientId: parseInt(selectedPatientId),
         doctorId: doctorId,
@@ -137,13 +154,15 @@ export default function DoctorAnalysis() {
         diagnosis: analysisData.diagnosis,
         clinicalNotes: analysisData.clinicalNotes.trim() || undefined,
         recommendSurgery: analysisData.recommendSurgery,
-        surgeryType: analysisData.surgeryType || undefined,
+        surgeryType: analysisData.surgeryType.trim() || undefined,
         surgeryUrgency: analysisData.surgeryUrgency as any,
         requireLabTests: analysisData.requireLabTests,
         labTestsNeeded: analysisData.labTestsNeeded.trim() || undefined,
         status: 'COMPLETED'
       };
 
+      console.log('Sending analysis data:', requestData);
+      
       const newAnalysis = await analysisService.create(requestData);
       setAnalyses(prev => [newAnalysis, ...prev]);
 
@@ -167,9 +186,21 @@ export default function DoctorAnalysis() {
       setLatestVitals(null);
     } catch (error: any) {
       console.error('Error saving analysis:', error);
+      let errorMessage = "Failed to save analysis";
+      
+      if (error.response?.data) {
+        if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to save analysis",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -185,13 +216,17 @@ export default function DoctorAnalysis() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return dateString;
+    }
   };
 
   const getSurgeryUrgencyLabel = (urgency: string) => {
@@ -210,6 +245,12 @@ export default function DoctorAnalysis() {
       case 'PENDING': return 'bg-yellow-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
+  };
+
+  const truncateText = (text: string, maxLength: number = 100) => {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
   };
 
   return (
@@ -269,26 +310,44 @@ export default function DoctorAnalysis() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">Medical History:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{selectedPatient.medicalHistory || 'None recorded'}</p>
+                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.medicalHistory || 'None recorded', 150)}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Allergies:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{selectedPatient.allergies || 'None recorded'}</p>
+                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.allergies || 'None recorded', 100)}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Current Medications:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{selectedPatient.currentMedications || 'None recorded'}</p>
+                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.currentMedications || 'None recorded', 100)}</p>
                     </div>
                     {latestVitals && (
                       <div className="pt-2 border-t">
                         <span className="text-muted-foreground">Latest Vitals:</span>
-                        <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
-                          <div>BP: {latestVitals.systolicBp}/{latestVitals.diastolicBp} mmHg</div>
-                          <div>HR: {latestVitals.heartRate} BPM</div>
-                          <div>Temp: {latestVitals.temperature}°C</div>
-                          <div>O2: {latestVitals.oxygenSaturation}%</div>
-                          <div>RR: {latestVitals.respiratoryRate} bpm</div>
-                          <div>Glucose: {latestVitals.bloodGlucose || 'N/A'} mg/dL</div>
+                        <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">BP:</span> 
+                            <span>{latestVitals.systolicBp || '--'}/{latestVitals.diastolicBp || '--'} mmHg</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">HR:</span> 
+                            <span>{latestVitals.heartRate || '--'} BPM</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">Temp:</span> 
+                            <span>{latestVitals.temperature || '--'}°C</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">O2:</span> 
+                            <span>{latestVitals.oxygenSaturation || '--'}%</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">RR:</span> 
+                            <span>{latestVitals.respiratoryRate || '--'} bpm</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">Glucose:</span> 
+                            <span>{latestVitals.bloodGlucose || '--'} mg/dL</span>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -321,6 +380,7 @@ export default function DoctorAnalysis() {
                   onChange={(e) => setAnalysisData(prev => ({ ...prev, symptoms: e.target.value }))}
                   rows={3}
                   required
+                  className="resize-none"
                 />
               </div>
 
@@ -333,6 +393,7 @@ export default function DoctorAnalysis() {
                   onChange={(e) => setAnalysisData(prev => ({ ...prev, diagnosis: e.target.value }))}
                   rows={2}
                   required
+                  className="resize-none"
                 />
               </div>
 
@@ -344,6 +405,7 @@ export default function DoctorAnalysis() {
                   value={analysisData.clinicalNotes}
                   onChange={(e) => setAnalysisData(prev => ({ ...prev, clinicalNotes: e.target.value }))}
                   rows={4}
+                  className="resize-none"
                 />
               </div>
 
@@ -355,14 +417,14 @@ export default function DoctorAnalysis() {
                     setAnalysisData(prev => ({ ...prev, requireLabTests: checked as boolean }))
                   }
                 />
-                <Label htmlFor="requireLabTests" className="cursor-pointer">
-                  <TestTube className="w-4 h-4 inline mr-2" />
+                <Label htmlFor="requireLabTests" className="cursor-pointer flex items-center gap-2">
+                  <TestTube className="w-4 h-4" />
                   Require Laboratory Tests
                 </Label>
               </div>
 
               {analysisData.requireLabTests && (
-                <div className="space-y-2">
+                <div className="space-y-2 pl-6">
                   <Label htmlFor="labTestsNeeded">Lab Tests Needed</Label>
                   <Textarea 
                     id="labTestsNeeded"
@@ -370,6 +432,7 @@ export default function DoctorAnalysis() {
                     value={analysisData.labTestsNeeded}
                     onChange={(e) => setAnalysisData(prev => ({ ...prev, labTestsNeeded: e.target.value }))}
                     rows={2}
+                    className="resize-none"
                   />
                 </div>
               )}
@@ -387,19 +450,20 @@ export default function DoctorAnalysis() {
                     }))
                   }
                 />
-                <Label htmlFor="recommendSurgery" className="cursor-pointer">
-                  <Scalpel className="w-4 h-4 inline mr-2" />
+                <Label htmlFor="recommendSurgery" className="cursor-pointer flex items-center gap-2">
+                  <Scissors className="w-4 h-4" /> {/* ✅ Changed from Scalpel to Scissors */}
                   Recommend Surgery
                 </Label>
               </div>
 
               {analysisData.recommendSurgery && (
-                <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                <div className="space-y-4 pl-6 border-l-2 border-red-200">
                   <div className="space-y-2">
-                    <Label htmlFor="surgeryType">Surgery Type</Label>
+                    <Label htmlFor="surgeryType">Surgery Type *</Label>
                     <Select 
                       value={analysisData.surgeryType} 
                       onValueChange={(value) => setAnalysisData(prev => ({ ...prev, surgeryType: value }))}
+                      required={analysisData.recommendSurgery}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select surgery type" />
@@ -516,7 +580,7 @@ export default function DoctorAnalysis() {
                     {analysis.recommendSurgery && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="font-medium text-red-800 flex items-center gap-2">
-                          <Scalpel className="w-4 h-4" />
+                          <Scissors className="w-4 h-4" /> {/* ✅ Changed from Scalpel to Scissors */}
                           Surgery Recommended
                         </div>
                         <div className="text-sm text-red-700 mt-1">
