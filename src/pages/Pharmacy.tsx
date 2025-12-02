@@ -3,141 +3,107 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CheckSquare, Package, Search, Clock, CheckCircle } from "lucide-react";
+import { CheckSquare, Package, Search, Clock, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { prescriptionsService, Prescription } from "@/services/prescriptionsService";
+import { usePatients } from "@/hooks/usePatients";
 
-interface Prescription {
-  id: string;
-  patient_id: string;
-  patient_name: string;
-  medication_name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  instructions?: string;
-  doctor_id: string;
-  status: 'pending' | 'dispensed' | 'collected';
-  created_at: string;
+interface PharmacyPrescription extends Prescription {
+  patient_name?: string;
+  status?: 'pending' | 'dispensed' | 'collected';
   dispensed_at?: string;
   collected_at?: string;
 }
 
 export default function Pharmacy() {
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [prescriptions, setPrescriptions] = useState<PharmacyPrescription[]>([]);
+  const { patients } = usePatients();
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
-    loadData();
+    loadPrescriptions();
   }, []);
 
-  const loadData = () => {
+  const loadPrescriptions = async () => {
     try {
-      const storedPrescriptions = localStorage.getItem('cvms_prescriptions');
-      if (storedPrescriptions) {
-        const parsed = JSON.parse(storedPrescriptions);
-        
-        // Filter out main prescription objects and only get individual medication prescriptions
-        const pharmacyPrescriptions = parsed.filter((p: any) => 
-          p.medication_name && !p.medications // Only individual medication entries
-        );
-        
-        // Add patient names with fallback for missing data
-        const storedPatients = localStorage.getItem('cvms_patients');
-        if (storedPatients) {
-          const patients = JSON.parse(storedPatients);
-          const enriched = pharmacyPrescriptions.map((p: any) => {
-            const patient = patients.find((pt: any) => pt.id === p.patient_id);
-            return {
-              ...p,
-              patient_name: p.patient_name || (patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown Patient'),
-              medication_name: p.medication_name || 'Unknown Medication',
-              status: p.status || 'pending'
-            };
-          });
-          setPrescriptions(enriched);
-        } else {
-          // If no patients found, ensure all prescriptions have required fields
-          const safePrescriptions = pharmacyPrescriptions.map((p: any) => ({
-            ...p,
-            patient_name: p.patient_name || 'Unknown Patient',
-            medication_name: p.medication_name || 'Unknown Medication',
-            status: p.status || 'pending'
-          }));
-          setPrescriptions(safePrescriptions);
-        }
-      } else {
-        setPrescriptions([]);
-      }
+      setLoading(true);
+      const data = await prescriptionsService.getAll();
+      
+      // Enrich prescriptions with patient names
+      const enriched = data.map((p) => {
+        const patient = patients.find((pt) => pt.id === p.patient_id);
+        return {
+          ...p,
+          patient_name: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient',
+          status: (p as any).status || 'pending',
+        };
+      });
+      
+      setPrescriptions(enriched);
     } catch (error) {
       console.error('Error loading prescriptions:', error);
-      setPrescriptions([]);
+      toast({
+        title: "Error",
+        description: "Failed to load prescriptions",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const savePrescriptions = (presc: Prescription[]) => {
+  const handleDispense = async (id: string) => {
     try {
-      // Get existing prescriptions from localStorage
-      const existingPrescriptions = JSON.parse(localStorage.getItem('cvms_prescriptions') || '[]');
+      await prescriptionsService.update(id, { 
+        ...prescriptions.find(p => p.id === id),
+        dispensed_at: new Date().toISOString() 
+      } as any);
       
-      // Filter out the pharmacy prescriptions we're about to update
-      const otherPrescriptions = existingPrescriptions.filter((p: any) => 
-        !p.medication_name || p.medications // Keep main prescriptions and non-pharmacy entries
+      const updated = prescriptions.map(p =>
+        p.id === id ? { ...p, status: 'dispensed' as const, dispensed_at: new Date().toISOString() } : p
       );
+      setPrescriptions(updated);
       
-      // Convert our pharmacy prescriptions to the format we want to save
-      const pharmacyPrescriptionsToSave = presc.map(prescription => ({
-        id: prescription.id,
-        patient_id: prescription.patient_id,
-        patient_name: prescription.patient_name, // Keep patient_name!
-        medication_name: prescription.medication_name,
-        dosage: prescription.dosage,
-        frequency: prescription.frequency,
-        duration: prescription.duration,
-        instructions: prescription.instructions,
-        doctor_id: prescription.doctor_id,
-        status: prescription.status,
-        created_at: prescription.created_at,
-        dispensed_at: prescription.dispensed_at,
-        collected_at: prescription.collected_at
-      }));
-      
-      // Combine both types of prescriptions
-      const allPrescriptions = [...otherPrescriptions, ...pharmacyPrescriptionsToSave];
-      localStorage.setItem('cvms_prescriptions', JSON.stringify(allPrescriptions));
-      setPrescriptions(presc);
+      toast({
+        title: "Medication Dispensed",
+        description: "Prescription has been prepared for collection",
+      });
     } catch (error) {
-      console.error('Error saving prescriptions:', error);
+      console.error('Error dispensing medication:', error);
       toast({
         title: "Error",
-        description: "Failed to save prescriptions",
+        description: "Failed to dispense medication",
         variant: "destructive",
       });
     }
   };
 
-  const handleDispense = (id: string) => {
-    const updated = prescriptions.map(p =>
-      p.id === id ? { ...p, status: 'dispensed' as const, dispensed_at: new Date().toISOString() } : p
-    );
-    savePrescriptions(updated);
-    
-    toast({
-      title: "Medication Dispensed",
-      description: "Prescription has been prepared for collection",
-    });
-  };
-
-  const handleCollect = (id: string) => {
-    const updated = prescriptions.map(p =>
-      p.id === id ? { ...p, status: 'collected' as const, collected_at: new Date().toISOString() } : p
-    );
-    savePrescriptions(updated);
-    
-    toast({
-      title: "Medication Collected",
-      description: "Patient has collected the prescribed medication",
-    });
+  const handleCollect = async (id: string) => {
+    try {
+      await prescriptionsService.update(id, { 
+        ...prescriptions.find(p => p.id === id),
+        collected_at: new Date().toISOString() 
+      } as any);
+      
+      const updated = prescriptions.map(p =>
+        p.id === id ? { ...p, status: 'collected' as const, collected_at: new Date().toISOString() } : p
+      );
+      setPrescriptions(updated);
+      
+      toast({
+        title: "Medication Collected",
+        description: "Patient has collected the prescribed medication",
+      });
+    } catch (error) {
+      console.error('Error collecting medication:', error);
+      toast({
+        title: "Error",
+        description: "Failed to mark as collected",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredPrescriptions = prescriptions.filter(p => {
@@ -221,14 +187,18 @@ export default function Pharmacy() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {filteredPrescriptions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No prescriptions found</p>
-              </div>
-            ) : (
+          <CardContent>
+            <div className="space-y-4">
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : filteredPrescriptions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No prescriptions found</p>
+                </div>
+              ) : (
               filteredPrescriptions.map((prescription) => (
                 <div key={prescription.id} className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-start justify-between">

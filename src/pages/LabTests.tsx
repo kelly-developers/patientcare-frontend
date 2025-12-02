@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Plus, FileText, Clock, CheckCircle, Download, Eye, FileDown } from "lucide-react";
+import { Activity, Plus, FileText, Clock, CheckCircle, Download, Eye, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePatients } from "@/hooks/usePatients";
+import { apiClient, API_ENDPOINTS } from "@/config/api";
 
 interface LabTest {
   id: string;
   patient_id: string;
-  patient_name: string;
   test_type: string;
   test_name: string;
   ordered_by: string;
@@ -29,7 +30,9 @@ interface LabTest {
 
 export default function LabTests() {
   const [labTests, setLabTests] = useState<LabTest[]>([]);
-  const [patients, setPatients] = useState<any[]>([]);
+  const { patients, loading: patientsLoading } = usePatients();
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [testType, setTestType] = useState("");
   const [testName, setTestName] = useState("");
@@ -41,40 +44,27 @@ export default function LabTests() {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadData();
+    loadLabTests();
   }, []);
 
-  const loadData = () => {
+  const loadLabTests = async () => {
     try {
-      const storedTests = localStorage.getItem('cvms_lab_tests');
-      const storedPatients = localStorage.getItem('cvms_patients') || localStorage.getItem('cardiovascular-patients') || localStorage.getItem('patients');
-      
-      if (storedTests) {
-        const parsedTests = JSON.parse(storedTests);
-        setLabTests(Array.isArray(parsedTests) ? parsedTests : []);
-      } else {
-        setLabTests([]);
-      }
-      
-      if (storedPatients) {
-        const parsedPatients = JSON.parse(storedPatients);
-        setPatients(Array.isArray(parsedPatients) ? parsedPatients : []);
-      } else {
-        setPatients([]);
-      }
+      setLoading(true);
+      const response = await apiClient.get(API_ENDPOINTS.LAB_TESTS.BASE);
+      setLabTests(response.data || []);
     } catch (error) {
-      console.error('Error loading data:', error);
-      setLabTests([]);
-      setPatients([]);
+      console.error('Error loading lab tests:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load lab tests",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveLabTests = (tests: LabTest[]) => {
-    localStorage.setItem('cvms_lab_tests', JSON.stringify(tests));
-    setLabTests(tests);
-  };
-
-  const handleOrderTest = () => {
+  const handleOrderTest = async () => {
     if (!selectedPatient || !testType || !testName) {
       toast({
         title: "Missing Information",
@@ -84,73 +74,77 @@ export default function LabTests() {
       return;
     }
 
-    const patient = patients.find(p => p.id === selectedPatient);
-    if (!patient) {
+    setSubmitting(true);
+
+    try {
+      const testData = {
+        patient_id: selectedPatient,
+        test_type: testType,
+        test_name: testName,
+        priority: priority as 'routine' | 'urgent' | 'stat',
+        notes: notes,
+        clinical_notes: clinicalNotes
+      };
+
+      const response = await apiClient.post(API_ENDPOINTS.LAB_TESTS.BASE, testData);
+      const newTest = response.data;
+
+      setLabTests(prev => [newTest, ...prev]);
+
+      toast({
+        title: "Test Ordered",
+        description: "Lab test has been ordered successfully",
+      });
+
+      // Reset form
+      setSelectedPatient("");
+      setTestType("");
+      setTestName("");
+      setPriority("routine");
+      setNotes("");
+      setClinicalNotes("");
+    } catch (error) {
+      console.error('Error ordering test:', error);
       toast({
         title: "Error",
-        description: "Selected patient not found",
+        description: "Failed to order lab test",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setSubmitting(false);
     }
-
-    const newTest: LabTest = {
-      id: `test_${Date.now()}`,
-      patient_id: selectedPatient,
-      patient_name: `${patient.first_name} ${patient.last_name}`,
-      test_type: testType,
-      test_name: testName,
-      ordered_by: "Dr. Current User",
-      ordered_date: new Date().toISOString(),
-      status: 'ordered',
-      priority: priority as any,
-      notes: notes,
-      clinical_notes: clinicalNotes,
-      created_at: new Date().toISOString(),
-    };
-
-    const updatedTests = [...labTests, newTest];
-    saveLabTests(updatedTests);
-
-    toast({
-      title: "Test Ordered",
-      description: "Lab test has been ordered successfully",
-    });
-
-    // Reset form
-    setSelectedPatient("");
-    setTestType("");
-    setTestName("");
-    setPriority("routine");
-    setNotes("");
-    setClinicalNotes("");
   };
 
-  const updateTestStatus = (id: string, status: LabTest['status'], results?: string) => {
-    const updatedTests = labTests.map(test => {
-      if (test.id === id) {
-        const updateData: Partial<LabTest> = { status };
-        if (status === 'completed') {
-          updateData.completed_date = new Date().toISOString();
-          updateData.report_date = new Date().toISOString();
-          if (results) {
-            updateData.results = results;
-          }
-        }
-        return { ...test, ...updateData };
+  const updateTestStatus = async (id: string, status: LabTest['status'], results?: string) => {
+    try {
+      const updateData: any = { status };
+      if (status === 'completed' && results) {
+        updateData.results = results;
+        updateData.completed_date = new Date().toISOString();
+        updateData.report_date = new Date().toISOString();
       }
-      return test;
-    });
-    saveLabTests(updatedTests);
-    
-    toast({
-      title: "Status Updated",
-      description: `Test status updated to ${status}`,
-    });
 
-    if (status === 'completed') {
-      setSelectedTest(null);
-      setTestResults("");
+      const response = await apiClient.put(API_ENDPOINTS.LAB_TESTS.BY_ID(id), updateData);
+      const updatedTest = response.data;
+
+      setLabTests(prev => prev.map(test => test.id === id ? updatedTest : test));
+      
+      toast({
+        title: "Status Updated",
+        description: `Test status updated to ${status}`,
+      });
+
+      if (status === 'completed') {
+        setSelectedTest(null);
+        setTestResults("");
+      }
+    } catch (error) {
+      console.error('Error updating test status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update test status",
+        variant: "destructive",
+      });
     }
   };
 
@@ -164,64 +158,9 @@ export default function LabTests() {
     }
   };
 
-  const generateTestReport = (test: LabTest) => {
-    const report = `
-LABORATORY TEST REPORT
-===============================
-
-PATIENT INFORMATION:
--------------------
-Name: ${test.patient_name}
-Patient ID: ${test.patient_id}
-
-TEST DETAILS:
--------------
-Test Type: ${test.test_type}
-Test Name: ${test.test_name}
-Ordered By: ${test.ordered_by}
-Order Date: ${new Date(test.ordered_date).toLocaleDateString()}
-Priority: ${test.priority.toUpperCase()}
-
-STATUS: ${test.status.toUpperCase()}
-${test.completed_date ? `Completed Date: ${new Date(test.completed_date).toLocaleDateString()}` : ''}
-
-CLINICAL NOTES:
---------------
-${test.clinical_notes || 'No clinical notes provided'}
-
-TEST NOTES:
------------
-${test.notes || 'No additional notes'}
-
-${test.results ? `
-TEST RESULTS:
--------------
-${test.results}
-` : ''}
-
-${test.report_date ? `
-Report Generated: ${new Date(test.report_date).toLocaleString()}
-` : ''}
-    `.trim();
-
-    return report;
-  };
-
-  const downloadReport = (test: LabTest) => {
-    const report = generateTestReport(test);
-    const blob = new Blob([report], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Lab_Report_${test.patient_name.replace(/\s+/g, '_')}_${test.test_name.replace(/\s+/g, '_')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const viewReport = (test: LabTest) => {
-    setSelectedTest(test);
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
   const getTestTypeDisplay = (type: string) => {
@@ -260,20 +199,16 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="patient">Patient *</Label>
-              <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+              <Select value={selectedPatient} onValueChange={setSelectedPatient} disabled={patientsLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select patient" />
+                  <SelectValue placeholder={patientsLoading ? "Loading..." : "Select patient"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {patients.map((patient) => {
-                    const hasOrderedTests = labTests.some(test => test.patient_id === patient.id && test.status === 'ordered');
-                    return (
-                      <SelectItem key={patient.id} value={patient.id}>
-                        {patient.first_name} {patient.last_name} - {patient.patient_id}
-                        {hasOrderedTests && " 🔬"}
-                      </SelectItem>
-                    );
-                  })}
+                  {patients.map((patient) => (
+                    <SelectItem key={patient.id} value={patient.id}>
+                      {patient.firstName} {patient.lastName} - {patient.patientId}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -322,12 +257,12 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="clinical-notes">Clinical Notes (Required by Doctor)</Label>
+              <Label htmlFor="clinical-notes">Clinical Notes</Label>
               <Textarea
                 id="clinical-notes"
                 value={clinicalNotes}
                 onChange={(e) => setClinicalNotes(e.target.value)}
-                placeholder="Doctor's notes, suspected conditions, specific areas to examine..."
+                placeholder="Doctor's notes, suspected conditions..."
                 rows={3}
               />
             </div>
@@ -338,14 +273,23 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Special instructions or additional information"
+                placeholder="Special instructions..."
                 rows={2}
               />
             </div>
 
-            <Button onClick={handleOrderTest} className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Order Test
+            <Button onClick={handleOrderTest} className="w-full" disabled={submitting || patientsLoading}>
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Ordering...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Order Test
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -357,11 +301,15 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
               <Activity className="w-5 h-5 text-primary" />
               Test Orders & Results
             </CardTitle>
-            <CardDescription>All laboratory test orders, results, and reports</CardDescription>
+            <CardDescription>All laboratory test orders and results</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {labTests.length === 0 ? (
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : labTests.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No lab tests ordered yet</p>
@@ -382,31 +330,22 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Patient: {test.patient_name}
+                          Patient: {getPatientName(test.patient_id)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Ordered by {test.ordered_by} on {new Date(test.ordered_date).toLocaleDateString()}
+                          Ordered on {new Date(test.ordered_date).toLocaleDateString()}
                         </p>
                         
-                        {/* Clinical Notes Section */}
                         {test.clinical_notes && (
                           <div className="mt-2 p-2 bg-blue-50 rounded border">
-                            <p className="text-xs font-medium text-blue-800">Clinical Notes from Doctor:</p>
+                            <p className="text-xs font-medium text-blue-800">Clinical Notes:</p>
                             <p className="text-xs text-blue-700 mt-1">{test.clinical_notes}</p>
                           </div>
                         )}
 
-                        {/* Test Notes */}
-                        {test.notes && (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            <span className="font-medium">Additional Notes:</span> {test.notes}
-                          </p>
-                        )}
-
-                        {/* Test Results */}
                         {test.results && (
                           <div className="mt-2 p-2 bg-green-50 rounded border">
-                            <p className="text-xs font-medium text-green-800">Test Results:</p>
+                            <p className="text-xs font-medium text-green-800">Results:</p>
                             <p className="text-xs text-green-700 mt-1 whitespace-pre-wrap">{test.results}</p>
                           </div>
                         )}
@@ -425,22 +364,10 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
                         </Button>
                       )}
                       {test.status === 'in-progress' && (
-                        <Button size="sm" variant="outline" onClick={() => viewReport(test)}>
+                        <Button size="sm" variant="outline" onClick={() => setSelectedTest(test)}>
                           <FileText className="w-3 h-3 mr-1" />
                           Enter Results
                         </Button>
-                      )}
-                      {test.status === 'completed' && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => viewReport(test)}>
-                            <Eye className="w-3 h-3 mr-1" />
-                            View Report
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => downloadReport(test)}>
-                            <Download className="w-3 h-3 mr-1" />
-                            Download
-                          </Button>
-                        </>
                       )}
                       {test.status !== 'cancelled' && test.status !== 'completed' && (
                         <Button size="sm" variant="destructive" onClick={() => updateTestStatus(test.id, 'cancelled')}>
@@ -463,56 +390,36 @@ Report Generated: ${new Date(test.report_date).toLocaleString()}
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                {selectedTest.status === 'in-progress' ? 'Enter Test Results' : 'Test Report'}
+                Enter Test Results
               </CardTitle>
               <CardDescription>
-                {selectedTest.test_name} for {selectedTest.patient_name}
+                {selectedTest.test_name} for {getPatientName(selectedTest.patient_id)}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {selectedTest.status === 'in-progress' ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="test-results">Test Results *</Label>
-                    <Textarea
-                      id="test-results"
-                      value={testResults}
-                      onChange={(e) => setTestResults(e.target.value)}
-                      placeholder="Enter detailed test results, findings, measurements, and interpretations..."
-                      rows={8}
-                    />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setSelectedTest(null)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={() => updateTestStatus(selectedTest.id, 'completed', testResults)}
-                      disabled={!testResults.trim()}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Complete Test
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-4 bg-muted rounded-lg">
-                    <pre className="text-sm whitespace-pre-wrap">
-                      {generateTestReport(selectedTest)}
-                    </pre>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setSelectedTest(null)}>
-                      Close
-                    </Button>
-                    <Button onClick={() => downloadReport(selectedTest)}>
-                      <FileDown className="w-4 h-4 mr-2" />
-                      Download Report
-                    </Button>
-                  </div>
-                </>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="results">Test Results</Label>
+                <Textarea
+                  id="results"
+                  value={testResults}
+                  onChange={(e) => setTestResults(e.target.value)}
+                  placeholder="Enter detailed test results..."
+                  rows={8}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => updateTestStatus(selectedTest.id, 'completed', testResults)}
+                  disabled={!testResults.trim()}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Complete Test
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedTest(null)}>
+                  Cancel
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

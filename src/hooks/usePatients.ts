@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { patientsService, Patient, CreatePatientRequest } from '@/services/patientsService';
+import { apiClient, API_ENDPOINTS } from '@/config/api';
 
 export type { Patient };
 
@@ -183,11 +184,76 @@ export const usePatients = () => {
     }
   };
 
+  const updatePatient = async (id: string, patientData: Partial<Patient>) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await apiClient.put(`${API_ENDPOINTS.PATIENTS.BASE}/${id}`, patientData);
+      const updatedPatient = response.data?.data || response.data;
+      
+      setPatients(prev => prev.map(patient => 
+        patient.id === id ? updatedPatient : patient
+      ));
+      
+      toast({
+        title: "Patient updated",
+        description: "Patient information has been updated successfully",
+      });
+      
+      return updatedPatient;
+    } catch (error: any) {
+      console.error('Error updating patient:', error);
+      setError(error.message);
+      
+      toast({
+        title: "Update failed",
+        description: error.message || "Failed to update patient",
+        variant: "destructive"
+      });
+      
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deletePatient = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await apiClient.delete(`${API_ENDPOINTS.PATIENTS.BASE}/${id}`);
+      
+      setPatients(prev => prev.filter(patient => patient.id !== id));
+      
+      toast({
+        title: "Patient deleted",
+        description: "Patient has been removed from the system",
+      });
+    } catch (error: any) {
+      console.error('Error deleting patient:', error);
+      setError(error.message);
+      
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete patient",
+        variant: "destructive"
+      });
+      
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     patients,
     loading,
     error,
     addPatient,
+    updatePatient,
+    deletePatient,
     uploadConsentForm,
     searchPatients,
     refreshPatients: loadPatients

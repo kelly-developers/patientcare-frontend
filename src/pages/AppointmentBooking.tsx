@@ -8,34 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, User, Stethoscope, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface Appointment {
-  id: string;
-  patientId: string;
-  patientName: string;
-  doctorId: string;
-  doctorName: string;
-  date: string;
-  time: string;
-  type: string;
-  status: string;
-  reason: string;
-  notes?: string;
-  priority: string;
-  createdAt: string;
-  arrivalStatus?: string;
-}
-
-interface Patient {
-  id: string;
-  patientId: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: string;
-  phone: string;
-  email: string;
-}
+import { appointmentsService, Appointment, CreateAppointmentRequest } from "@/services/appointmentsService";
+import { usePatients } from "@/hooks/usePatients";
 
 interface Doctor {
   id: string;
@@ -51,11 +25,9 @@ const doctors: Doctor[] = [
   { id: "4", name: "Dr. James Wilson", specialty: "Cardiothoracic Surgeon", available: false },
 ];
 
-const API_BASE_URL = 'https://patientcarebackend.onrender.com/api';
-
 export default function AppointmentBooking() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const { patients, loading: patientsLoading } = usePatients();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -72,17 +44,13 @@ export default function AppointmentBooking() {
 
   useEffect(() => {
     loadAppointments();
-    loadPatients();
   }, []);
 
   const loadAppointments = async () => {
     try {
       setLoading(true);
-      // For now, we'll use localStorage as the backend might not have appointments endpoint
-      const stored = localStorage.getItem('cardiovascular-appointments');
-      if (stored) {
-        setAppointments(JSON.parse(stored));
-      }
+      const data = await appointmentsService.getAll();
+      setAppointments(data);
     } catch (error) {
       console.error('Error loading appointments:', error);
       toast({
@@ -90,44 +58,6 @@ export default function AppointmentBooking() {
         description: "Failed to load appointments",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPatients = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/patients`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setPatients(result.data);
-        } else {
-          throw new Error(result.message || 'Failed to load patients');
-        }
-      } else {
-        throw new Error('Failed to fetch patients');
-      }
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load patients from server",
-        variant: "destructive",
-      });
-      
-      // Fallback to localStorage if API fails
-      const stored = localStorage.getItem('patients');
-      if (stored) {
-        setPatients(JSON.parse(stored));
-      }
     } finally {
       setLoading(false);
     }
@@ -160,49 +90,18 @@ export default function AppointmentBooking() {
     setSubmitting(true);
 
     try {
-      // First, try to save to backend API
-      const appointmentData = {
-        patientId: selectedPatient.patientId,
-        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
-        doctorId: formData.doctorId || 'unassigned',
-        doctorName: selectedDoctor?.name || 'Unassigned',
-        date: formData.date,
-        time: formData.time,
+      const appointmentData: CreateAppointmentRequest = {
+        patient_id: formData.patientId,
+        doctor_id: formData.doctorId || 'unassigned',
+        appointment_date: formData.date,
+        appointment_time: formData.time,
         type: formData.type,
         status: 'scheduled',
-        reason: formData.reason,
-        notes: formData.notes,
-        priority: formData.priority,
-        arrivalStatus: 'pending'
+        notes: `${formData.reason}\n\n${formData.notes}`.trim()
       };
 
-      // For now, we'll use localStorage as the backend might not have appointments endpoint
-      // In a real implementation, you would send this to your backend API
-      const newAppointment: Appointment = {
-        id: Date.now().toString(),
-        ...appointmentData,
-        createdAt: new Date().toISOString(),
-      };
-
-      const updatedAppointments = [newAppointment, ...appointments];
-      setAppointments(updatedAppointments);
-      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
-
-      // Create notification for doctor
-      const notifications = JSON.parse(localStorage.getItem('cardiovascular-notifications') || '[]');
-      const notification = {
-        id: Date.now().toString() + '_notif',
-        type: 'appointment',
-        title: 'New Appointment Scheduled',
-        message: `${newAppointment.patientName} has been scheduled for ${formData.type} on ${formData.date} at ${formData.time}`,
-        doctorId: formData.doctorId,
-        appointmentId: newAppointment.id,
-        priority: formData.priority,
-        read: false,
-        createdAt: new Date().toISOString()
-      };
-      notifications.unshift(notification);
-      localStorage.setItem('cardiovascular-notifications', JSON.stringify(notifications));
+      const newAppointment = await appointmentsService.create(appointmentData);
+      setAppointments(prev => [newAppointment, ...prev]);
 
       // Reset form
       setFormData({
@@ -218,7 +117,7 @@ export default function AppointmentBooking() {
 
       toast({
         title: "Success",
-        description: "Appointment scheduled successfully. Doctor has been notified.",
+        description: "Appointment scheduled successfully",
       });
     } catch (error) {
       console.error('Error creating appointment:', error);
@@ -234,12 +133,8 @@ export default function AppointmentBooking() {
 
   const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
     try {
-      // For now, update locally. In real implementation, call backend API
-      const updatedAppointments = appointments.map(app => 
-        app.id === appointmentId ? { ...app, status: newStatus as any } : app
-      );
-      setAppointments(updatedAppointments);
-      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
+      const updated = await appointmentsService.update(appointmentId, { status: newStatus });
+      setAppointments(prev => prev.map(app => app.id === appointmentId ? updated : app));
 
       toast({
         title: "Status Updated",
@@ -255,36 +150,6 @@ export default function AppointmentBooking() {
     }
   };
 
-  const updateArrivalStatus = async (appointmentId: string, arrivalStatus: 'arrived' | 'late' | 'no-show') => {
-    try {
-      const updatedAppointments = appointments.map(app => {
-        if (app.id === appointmentId) {
-          // If late, move to end of schedule for that day
-          if (arrivalStatus === 'late') {
-            return { ...app, arrivalStatus, priority: 'low' as any };
-          }
-          return { ...app, arrivalStatus };
-        }
-        return app;
-      });
-      
-      setAppointments(updatedAppointments);
-      localStorage.setItem('cardiovascular-appointments', JSON.stringify(updatedAppointments));
-
-      toast({
-        title: arrivalStatus === 'arrived' ? "Patient Arrived" : arrivalStatus === 'late' ? "Marked as Late" : "Marked as No-Show",
-        description: arrivalStatus === 'late' ? "Patient moved to end of schedule" : undefined,
-      });
-    } catch (error) {
-      console.error('Error updating arrival status:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update arrival status",
-        variant: "destructive",
-      });
-    }
-  };
-
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'scheduled': return 'bg-blue-500 text-white';
@@ -295,22 +160,17 @@ export default function AppointmentBooking() {
     }
   };
 
-  const getPriorityBadgeColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-500 text-white';
-      case 'high': return 'bg-orange-500 text-white';
-      case 'medium': return 'bg-yellow-500 text-black';
-      case 'low': return 'bg-green-500 text-white';
-      default: return 'bg-gray-500 text-white';
-    }
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
   return (
@@ -341,10 +201,10 @@ export default function AppointmentBooking() {
                 <Select 
                   value={formData.patientId} 
                   onValueChange={(value) => setFormData({...formData, patientId: value})}
-                  disabled={loading}
+                  disabled={patientsLoading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={loading ? "Loading patients..." : "Choose patient..."} />
+                    <SelectValue placeholder={patientsLoading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
@@ -399,41 +259,22 @@ export default function AppointmentBooking() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="type">Appointment Type</Label>
-                  <Select 
-                    value={formData.type} 
-                    onValueChange={(value) => setFormData({...formData, type: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="consultation">Consultation</SelectItem>
-                      <SelectItem value="follow-up">Follow-up</SelectItem>
-                      <SelectItem value="emergency">Emergency</SelectItem>
-                      <SelectItem value="surgery">Surgery</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Priority</Label>
-                  <Select 
-                    value={formData.priority} 
-                    onValueChange={(value) => setFormData({...formData, priority: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select priority..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="type">Appointment Type</Label>
+                <Select 
+                  value={formData.type} 
+                  onValueChange={(value) => setFormData({...formData, type: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="consultation">Consultation</SelectItem>
+                    <SelectItem value="follow-up">Follow-up</SelectItem>
+                    <SelectItem value="emergency">Emergency</SelectItem>
+                    <SelectItem value="surgery">Surgery</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -459,7 +300,7 @@ export default function AppointmentBooking() {
               <Button 
                 type="submit" 
                 className="w-full bg-gradient-medical text-white"
-                disabled={submitting || loading}
+                disabled={submitting || patientsLoading}
               >
                 {submitting ? (
                   <>
@@ -491,79 +332,56 @@ export default function AppointmentBooking() {
                 <div className="flex justify-center items-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
-              ) : appointments.map((appointment) => (
-                <div key={appointment.id} className="p-4 bg-background rounded-lg border">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-medium">{appointment.patientName}</div>
-                    <div className="flex gap-2">
-                      <Badge className={getPriorityBadgeColor(appointment.priority)}>
-                        {appointment.priority.toUpperCase()}
-                      </Badge>
+              ) : appointments.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No appointments scheduled</p>
+                </div>
+              ) : (
+                appointments.map((appointment) => (
+                  <div key={appointment.id} className="p-4 bg-background rounded-lg border">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium">{getPatientName(appointment.patient_id)}</div>
                       <Badge className={getStatusBadgeColor(appointment.status)}>
-                        {appointment.status.toUpperCase()}
+                        {appointment.status}
                       </Badge>
                     </div>
-                  </div>
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <div><strong>Doctor:</strong> {appointment.doctorName}</div>
-                    <div><strong>Date & Time:</strong> {formatDate(appointment.date)} at {appointment.time}</div>
-                    <div><strong>Type:</strong> {appointment.type}</div>
-                    {appointment.reason && (
-                      <div><strong>Reason:</strong> {appointment.reason}</div>
-                    )}
-                    {appointment.arrivalStatus && appointment.arrivalStatus !== 'pending' && (
-                      <div>
-                        <strong>Arrival Status:</strong> 
-                        <Badge className="ml-2" variant={
-                          appointment.arrivalStatus === 'arrived' ? 'default' : 
-                          appointment.arrivalStatus === 'late' ? 'secondary' : 'destructive'
-                        }>
-                          {appointment.arrivalStatus}
-                        </Badge>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(appointment.appointment_date)} at {appointment.appointment_time}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Stethoscope className="w-3 h-3" />
+                        {appointment.type}
+                      </div>
+                      {appointment.notes && (
+                        <div className="mt-2 text-xs">
+                          <span className="font-medium">Notes:</span> {appointment.notes}
+                        </div>
+                      )}
+                    </div>
+                    {appointment.status === 'scheduled' && (
+                      <div className="flex gap-2 mt-3">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => updateAppointmentStatus(appointment.id, 'confirmed')}
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Confirm
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     )}
                   </div>
-                  {appointment.status === 'scheduled' && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => updateArrivalStatus(appointment.id, 'arrived')}
-                        variant="default"
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Arrived
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => updateArrivalStatus(appointment.id, 'late')}
-                        variant="secondary"
-                      >
-                        <Clock className="w-3 h-3 mr-1" />
-                        Late
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateArrivalStatus(appointment.id, 'no-show')}
-                      >
-                        <AlertCircle className="w-3 h-3 mr-1" />
-                        No-Show
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {appointments.length === 0 && !loading && (
-                <div className="text-center text-muted-foreground py-8">
-                  No appointments scheduled yet
-                </div>
+                ))
               )}
             </div>
           </CardContent>

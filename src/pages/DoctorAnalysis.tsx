@@ -1,52 +1,71 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { 
   Stethoscope, 
   User, 
-  FileText, 
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { analysisService, type DoctorAnalysis as DoctorAnalysisType, CreateAnalysisRequest } from "@/services/analysisService";
+import { usePatients } from "@/hooks/usePatients";
+import { vitalDataService } from "@/services/vitalDataService";
 
 export default function DoctorAnalysis() {
-  const [patients, setPatients] = useState<any[]>([]);
-  const [analyses, setAnalyses] = useState<any[]>([]);
+  const { patients, loading: patientsLoading } = usePatients();
+  const [analyses, setAnalyses] = useState<DoctorAnalysisType[]>([]);
+  const [latestVitals, setLatestVitals] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [analysisData, setAnalysisData] = useState({
-    symptoms: "",
     diagnosis: "",
-    clinicalNotes: "",
-    recommendSurgery: false,
-    surgeryType: "",
+    recommendedSurgery: "",
     surgeryUrgency: "",
-    requireLabTests: false,
-    labTestsNeeded: ""
+    clinicalNotes: ""
   });
   const { toast } = useToast();
 
   useEffect(() => {
-    loadPatients();
     loadAnalyses();
   }, []);
 
-  const loadPatients = () => {
-    const stored = localStorage.getItem('cvms_patients') || localStorage.getItem('cardiovascular-patients') || localStorage.getItem('patients');
-    if (stored) {
-      setPatients(JSON.parse(stored));
+  useEffect(() => {
+    if (selectedPatientId) {
+      loadPatientVitals(selectedPatientId);
+    }
+  }, [selectedPatientId]);
+
+  const loadAnalyses = async () => {
+    try {
+      setLoading(true);
+      const data = await analysisService.getAll();
+      setAnalyses(data);
+    } catch (error) {
+      console.error('Error loading analyses:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadAnalyses = () => {
-    const stored = localStorage.getItem('cvms_analyses') || localStorage.getItem('cardiovascular-analyses');
-    if (stored) {
-      setAnalyses(JSON.parse(stored));
+  const loadPatientVitals = async (patientId: string) => {
+    try {
+      const vitals = await vitalDataService.getByPatient(patientId);
+      if (vitals && vitals.length > 0) {
+        setLatestVitals(vitals[vitals.length - 1]);
+      } else {
+        setLatestVitals(null);
+      }
+    } catch (error) {
+      console.error('Error loading patient vitals:', error);
+      setLatestVitals(null);
     }
   };
 
@@ -61,11 +80,6 @@ export default function DoctorAnalysis() {
     return age;
   };
 
-  const getVitalDataByPatient = (patientId: string) => {
-    const vitals = JSON.parse(localStorage.getItem('cvms_vital_data') || localStorage.getItem('cardiovascular-vitals') || '[]');
-    return vitals.filter((v: any) => v.patient_id === patientId || v.patientId === patientId);
-  };
-
   const handleAnalysisSubmit = async () => {
     if (!selectedPatientId) {
       toast({
@@ -76,122 +90,63 @@ export default function DoctorAnalysis() {
       return;
     }
 
-    if (!analysisData.symptoms || !analysisData.diagnosis) {
+    if (!analysisData.diagnosis) {
       toast({
         title: "Error",
-        description: "Please enter symptoms and diagnosis",
+        description: "Please enter a diagnosis",
         variant: "destructive",
       });
       return;
     }
 
-    const selectedPatient = patients.find(p => p.id === selectedPatientId);
+    setSubmitting(true);
 
     try {
-      const newAnalysis = {
-        id: Date.now().toString(),
+      const requestData: CreateAnalysisRequest = {
         patient_id: selectedPatientId,
-        patient_name: `${selectedPatient?.first_name} ${selectedPatient?.last_name}`,
-        doctor_id: 'Dr. Admin',
-        symptoms: analysisData.symptoms,
+        doctor_id: "current-doctor", // Replace with actual doctor ID from auth
         diagnosis: analysisData.diagnosis,
-        clinical_notes: analysisData.clinicalNotes,
-        recommend_surgery: analysisData.recommendSurgery,
-        surgery_type: analysisData.surgeryType,
-        surgery_urgency: analysisData.surgeryUrgency,
-        require_lab_tests: analysisData.requireLabTests,
-        lab_tests_needed: analysisData.labTestsNeeded,
-        status: 'completed',
-        created_at: new Date().toISOString()
+        recommended_surgery: analysisData.recommendedSurgery || undefined,
+        surgery_urgency: analysisData.surgeryUrgency || undefined,
+        clinical_notes: analysisData.clinicalNotes || undefined,
+        status: 'completed'
       };
 
-      const updatedAnalyses = [newAnalysis, ...analyses];
-      setAnalyses(updatedAnalyses);
-      localStorage.setItem('cvms_analyses', JSON.stringify(updatedAnalyses));
-      localStorage.setItem('cardiovascular-analyses', JSON.stringify(updatedAnalyses)); // Keep for backward compatibility
+      const newAnalysis = await analysisService.create(requestData);
+      setAnalyses(prev => [newAnalysis, ...prev]);
 
-      // If surgery is recommended, add to surgery scheduling
-      if (analysisData.recommendSurgery && analysisData.surgeryType) {
-        const surgeryData = {
-          id: Date.now().toString(),
-          patient_id: selectedPatientId,
-          patient_name: `${selectedPatient?.first_name} ${selectedPatient?.last_name}`,
-          procedure_name: analysisData.surgeryType,
-          urgency: analysisData.surgeryUrgency,
-          recommended_by: 'Dr. Admin',
-          status: 'consent_pending',
-          created_at: new Date().toISOString(),
-          diagnosis: analysisData.diagnosis
-        };
-        
-        const existingSurgeries = JSON.parse(localStorage.getItem('cvms_surgeries') || localStorage.getItem('cardiovascular-surgeries') || '[]');
-        localStorage.setItem('cvms_surgeries', JSON.stringify([surgeryData, ...existingSurgeries]));
-        localStorage.setItem('cardiovascular-surgeries', JSON.stringify([surgeryData, ...existingSurgeries])); // Keep for backward compatibility
-      }
-
-      // If lab tests are required, create lab test orders
-      if (analysisData.requireLabTests && analysisData.labTestsNeeded) {
-        const testNames = analysisData.labTestsNeeded.split(',').map(t => t.trim()).filter(t => t);
-        const existingTests = JSON.parse(localStorage.getItem('cvms_lab_tests') || '[]');
-        
-        testNames.forEach(testName => {
-          const labTest = {
-            id: `test_${Date.now()}_${Math.random()}`,
-            patient_id: selectedPatientId,
-            patient_name: `${selectedPatient?.first_name} ${selectedPatient?.last_name}`,
-            test_type: 'blood',
-            test_name: testName,
-            ordered_by: 'Dr. Admin',
-            ordered_date: new Date().toISOString(),
-            status: 'ordered',
-            priority: 'routine',
-            notes: `Ordered from doctor analysis - ${analysisData.diagnosis}`,
-            created_at: new Date().toISOString()
-          };
-          existingTests.push(labTest);
-        });
-        
-        localStorage.setItem('cvms_lab_tests', JSON.stringify(existingTests));
-      }
-
-      let description = "Medical assessment completed successfully";
-      if (analysisData.recommendSurgery && analysisData.requireLabTests) {
-        description = "Analysis saved, patient added to surgery consent, and lab tests ordered";
-      } else if (analysisData.recommendSurgery) {
-        description = "Analysis saved and patient added to surgery consent";
-      } else if (analysisData.requireLabTests) {
-        description = "Analysis saved and lab tests ordered";
-      }
-      
       toast({
         title: "Analysis Completed",
-        description: description,
+        description: "Medical assessment saved successfully",
       });
 
       // Reset form
       setAnalysisData({
-        symptoms: "",
         diagnosis: "",
-        clinicalNotes: "",
-        recommendSurgery: false,
-        surgeryType: "",
+        recommendedSurgery: "",
         surgeryUrgency: "",
-        requireLabTests: false,
-        labTestsNeeded: ""
+        clinicalNotes: ""
       });
       setSelectedPatientId("");
+      setLatestVitals(null);
     } catch (error) {
+      console.error('Error saving analysis:', error);
       toast({
         title: "Error",
         description: "Failed to save analysis",
         variant: "destructive",
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const selectedPatient = patients.find(p => p.id === selectedPatientId);
-  const vitalData = selectedPatientId ? getVitalDataByPatient(selectedPatientId) : [];
-  const latestVitals = vitalData[vitalData.length - 1];
+
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
+  };
 
   return (
     <div className="space-y-6">
@@ -218,14 +173,18 @@ export default function DoctorAnalysis() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="patient">Patient</Label>
-                <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
+                <Select 
+                  value={selectedPatientId} 
+                  onValueChange={setSelectedPatientId}
+                  disabled={patientsLoading}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose patient..." />
+                    <SelectValue placeholder={patientsLoading ? "Loading..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
                       <SelectItem key={patient.id} value={patient.id}>
-                        {patient.first_name} {patient.last_name} - {patient.patient_id}
+                        {patient.firstName} {patient.lastName} - {patient.patientId}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -238,7 +197,7 @@ export default function DoctorAnalysis() {
                   <div className="space-y-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">Age:</span>{" "}
-                      <span className="font-medium">{getPatientAge(selectedPatient.date_of_birth)} years</span>
+                      <span className="font-medium">{getPatientAge(selectedPatient.dateOfBirth)} years</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Gender:</span>{" "}
@@ -246,7 +205,7 @@ export default function DoctorAnalysis() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">Medical History:</span>{" "}
-                      <p className="text-foreground mt-1">{selectedPatient.medical_history || 'None recorded'}</p>
+                      <p className="text-foreground mt-1">{selectedPatient.medicalHistory || 'None recorded'}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Allergies:</span>{" "}
@@ -256,10 +215,10 @@ export default function DoctorAnalysis() {
                       <div className="pt-2 border-t">
                         <span className="text-muted-foreground">Latest Vitals:</span>
                         <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
-                          <div>BP: {latestVitals.bloodPressureSystolic}/{latestVitals.bloodPressureDiastolic}</div>
-                          <div>HR: {latestVitals.heartRate} BPM</div>
+                          <div>BP: {latestVitals.blood_pressure_systolic}/{latestVitals.blood_pressure_diastolic}</div>
+                          <div>HR: {latestVitals.heart_rate} BPM</div>
                           <div>Temp: {latestVitals.temperature}°C</div>
-                          <div>O2: {latestVitals.oxygenSaturation}%</div>
+                          <div>O2: {latestVitals.oxygen_saturation}%</div>
                         </div>
                       </div>
                     )}
@@ -278,23 +237,11 @@ export default function DoctorAnalysis() {
               Medical Analysis
             </CardTitle>
             <CardDescription>
-              Record symptoms, diagnosis, and treatment plan
+              Record diagnosis and treatment plan
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="symptoms">Symptoms *</Label>
-                <Textarea 
-                  id="symptoms"
-                  placeholder="Record all patient symptoms: chest pain, shortness of breath, fatigue, palpitations, etc."
-                  value={analysisData.symptoms}
-                  onChange={(e) => setAnalysisData(prev => ({ ...prev, symptoms: e.target.value }))}
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="diagnosis">Diagnosis *</Label>
                 <Input 
@@ -312,125 +259,67 @@ export default function DoctorAnalysis() {
                   placeholder="Additional observations, test results, recommendations..."
                   value={analysisData.clinicalNotes}
                   onChange={(e) => setAnalysisData(prev => ({ ...prev, clinicalNotes: e.target.value }))}
-                  rows={3}
+                  rows={4}
                 />
               </div>
 
-              <div className="border-t pt-4 space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="recommendSurgery"
-                    checked={analysisData.recommendSurgery}
-                    onCheckedChange={(checked) => setAnalysisData(prev => ({ 
-                      ...prev, 
-                      recommendSurgery: checked as boolean,
-                      surgeryType: checked ? prev.surgeryType : "",
-                      surgeryUrgency: checked ? prev.surgeryUrgency : ""
-                    }))}
-                  />
-                  <Label htmlFor="recommendSurgery" className="font-medium cursor-pointer">
-                    Recommend Surgery
-                  </Label>
-                </div>
-
-                {analysisData.recommendSurgery && (
-                  <div className="pl-6 space-y-4 animate-in fade-in duration-200">
-                    <div className="space-y-2">
-                      <Label htmlFor="surgeryType">Surgery Type *</Label>
-                      <Select 
-                        value={analysisData.surgeryType} 
-                        onValueChange={(value) => setAnalysisData(prev => ({ ...prev, surgeryType: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select surgery type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Coronary Artery Bypass Grafting (CABG)">Coronary Artery Bypass Grafting (CABG)</SelectItem>
-                          <SelectItem value="Heart Valve Replacement">Heart Valve Replacement</SelectItem>
-                          <SelectItem value="Angioplasty & Stent Placement">Angioplasty & Stent Placement</SelectItem>
-                          <SelectItem value="Pacemaker Installation">Pacemaker Installation</SelectItem>
-                          <SelectItem value="Cardiac Ablation">Cardiac Ablation</SelectItem>
-                          <SelectItem value="Heart Transplant">Heart Transplant</SelectItem>
-                          <SelectItem value="Other Cardiac Surgery">Other Cardiac Surgery</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="surgeryUrgency">Surgery Urgency *</Label>
-                      <Select 
-                        value={analysisData.surgeryUrgency} 
-                        onValueChange={(value) => setAnalysisData(prev => ({ ...prev, surgeryUrgency: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select urgency level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="emergency">Emergency (0-6 hours)</SelectItem>
-                          <SelectItem value="urgent">Urgent (24-48 hours)</SelectItem>
-                          <SelectItem value="routine">Routine (1-2 weeks)</SelectItem>
-                          <SelectItem value="elective">Elective (1+ months)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox 
-                    id="requireLabTests"
-                    checked={analysisData.requireLabTests}
-                    onCheckedChange={(checked) => setAnalysisData(prev => ({ 
-                      ...prev, 
-                      requireLabTests: checked as boolean,
-                      labTestsNeeded: checked ? prev.labTestsNeeded : ""
-                    }))}
-                  />
-                  <Label htmlFor="requireLabTests" className="font-medium cursor-pointer">
-                    Require Lab Tests
-                  </Label>
-                </div>
-
-                {analysisData.requireLabTests && (
-                  <div className="pl-6 space-y-2 animate-in fade-in duration-200">
-                    <Label htmlFor="labTestsNeeded">Tests Needed *</Label>
-                    <Textarea 
-                      id="labTestsNeeded"
-                      placeholder="Enter lab tests needed (comma separated): ECG, Blood Test, CT Scan, etc."
-                      value={analysisData.labTestsNeeded}
-                      onChange={(e) => setAnalysisData(prev => ({ ...prev, labTestsNeeded: e.target.value }))}
-                      rows={2}
-                    />
-                  </div>
-                )}
+              <div className="space-y-2">
+                <Label htmlFor="recommendedSurgery">Recommended Surgery (Optional)</Label>
+                <Select 
+                  value={analysisData.recommendedSurgery} 
+                  onValueChange={(value) => setAnalysisData(prev => ({ ...prev, recommendedSurgery: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select surgery type (if applicable)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Surgery Needed</SelectItem>
+                    <SelectItem value="Coronary Artery Bypass Grafting (CABG)">CABG</SelectItem>
+                    <SelectItem value="Heart Valve Replacement">Heart Valve Replacement</SelectItem>
+                    <SelectItem value="Angioplasty & Stent Placement">Angioplasty & Stent</SelectItem>
+                    <SelectItem value="Pacemaker Installation">Pacemaker Installation</SelectItem>
+                    <SelectItem value="Cardiac Ablation">Cardiac Ablation</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {analysisData.recommendedSurgery && analysisData.recommendedSurgery !== "none" && (
+                <div className="space-y-2">
+                  <Label htmlFor="surgeryUrgency">Surgery Urgency</Label>
+                  <Select 
+                    value={analysisData.surgeryUrgency} 
+                    onValueChange={(value) => setAnalysisData(prev => ({ ...prev, surgeryUrgency: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select urgency level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="emergency">Emergency (0-6 hours)</SelectItem>
+                      <SelectItem value="urgent">Urgent (24-48 hours)</SelectItem>
+                      <SelectItem value="routine">Routine (1-2 weeks)</SelectItem>
+                      <SelectItem value="elective">Elective (1+ months)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Button 
                   className="bg-gradient-medical text-white"
                   onClick={handleAnalysisSubmit}
-                  disabled={!selectedPatientId}
+                  disabled={!selectedPatientId || submitting}
                 >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Complete Analysis
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => {
-                    setAnalysisData({
-                      symptoms: "",
-                      diagnosis: "",
-                      clinicalNotes: "",
-                      recommendSurgery: false,
-                      surgeryType: "",
-                      surgeryUrgency: "",
-                      requireLabTests: false,
-                      labTestsNeeded: ""
-                    });
-                    setSelectedPatientId("");
-                  }}
-                >
-                  Clear Form
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Complete Analysis
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -438,67 +327,48 @@ export default function DoctorAnalysis() {
         </Card>
       </div>
 
-      {/* Recent Analyses */}
+      {/* Previous Analyses */}
       <Card className="bg-gradient-card shadow-card">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            Recent Medical Analyses
-          </CardTitle>
-          <CardDescription>
-            Recently completed patient assessments
-          </CardDescription>
+          <CardTitle>Recent Analyses</CardTitle>
+          <CardDescription>Previously completed medical assessments</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {analyses.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : analyses.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                No analyses recorded yet
+                <Stethoscope className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No analyses completed yet</p>
               </div>
             ) : (
               analyses.map((analysis) => (
-                <div key={analysis.id} className="p-4 bg-background rounded-lg border">
-                  <div className="flex justify-between items-start mb-3">
+                <div key={analysis.id} className="p-4 border rounded-lg">
+                  <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h4 className="font-medium text-foreground">
-                        {analysis.patient_name}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        Analyzed by: {analysis.doctor_id} • {new Date(analysis.created_at).toLocaleDateString()}
-                      </p>
+                      <div className="font-medium">{getPatientName(analysis.patient_id)}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(analysis.created_at).toLocaleDateString()}
+                      </div>
                     </div>
-                    {analysis.recommend_surgery && (
-                      <Badge variant="destructive">Surgery Recommended</Badge>
-                    )}
+                    <Badge>{analysis.status}</Badge>
                   </div>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="font-medium">Symptoms:</span> {analysis.symptoms}
-                    </div>
+                  <div className="space-y-1 text-sm">
                     <div>
                       <span className="font-medium">Diagnosis:</span> {analysis.diagnosis}
                     </div>
-                    {analysis.clinical_notes && (
+                    {analysis.recommended_surgery && (
                       <div>
-                        <span className="font-medium">Clinical Notes:</span> {analysis.clinical_notes}
+                        <span className="font-medium">Surgery:</span> {analysis.recommended_surgery}
+                        {analysis.surgery_urgency && ` (${analysis.surgery_urgency})`}
                       </div>
                     )}
-                    {analysis.recommend_surgery && (
-                      <>
-                        <div>
-                          <span className="font-medium">Surgery Type:</span> {analysis.surgery_type}
-                        </div>
-                        <div>
-                          <span className="font-medium">Urgency:</span>{" "}
-                          <Badge variant="outline" className="ml-1">
-                            {analysis.surgery_urgency}
-                          </Badge>
-                        </div>
-                      </>
-                    )}
-                    {analysis.require_lab_tests && (
-                      <div>
-                        <span className="font-medium">Lab Tests Required:</span> {analysis.lab_tests_needed}
+                    {analysis.clinical_notes && (
+                      <div className="text-muted-foreground text-xs mt-2">
+                        {analysis.clinical_notes}
                       </div>
                     )}
                   </div>

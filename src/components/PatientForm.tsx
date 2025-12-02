@@ -29,11 +29,11 @@ interface PatientFormData {
 }
 
 interface PatientFormProps {
-  onSubmit: (data: PatientFormData & { consentAccepted: boolean; consentFile?: File }) => void;
-  isLoading: boolean;
+  onSubmit: (data: any) => void;
+  isLoading?: boolean;
 }
 
-export default function PatientForm({ onSubmit, isLoading }: PatientFormProps) {
+export default function PatientForm({ onSubmit, isLoading = false }: PatientFormProps) {
   const [formData, setFormData] = useState<PatientFormData>({
     first_name: "",
     last_name: "",
@@ -202,11 +202,25 @@ NOTES:
       return;
     }
 
-    onSubmit({ 
-      ...formData, 
+    // Convert snake_case to camelCase for backend
+    const processedData = {
+      firstName: formData.first_name,
+      lastName: formData.last_name,
+      dateOfBirth: formData.date_of_birth,
+      gender: formData.gender,
+      phone: formData.phone,
+      email: formData.email,
+      address: formData.address,
+      emergencyContactName: formData.emergency_contact_name,
+      emergencyContactPhone: formData.emergency_contact_phone,
+      medicalHistory: formData.medical_history,
+      allergies: formData.allergies,
+      currentMedications: formData.current_medications,
       consentAccepted,
       consentFile
-    });
+    };
+
+    onSubmit(processedData);
   };
 
   const removeFile = () => {

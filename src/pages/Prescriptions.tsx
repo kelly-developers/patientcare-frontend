@@ -6,32 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Pill, Calendar, User, AlertTriangle, CheckCircle } from "lucide-react";
+import { FileText, Pill, Calendar, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface Prescription {
-  id: string;
-  patientId: string;
-  patientName: string;
-  doctorId: string;
-  doctorName: string;
-  medications: Medication[];
-  diagnosis: string;
-  instructions: string;
-  duration: string;
-  followUpDate: string;
-  status: 'active' | 'completed' | 'discontinued';
-  prescribedAt: string;
-  pharmacy?: string;
-}
-
-interface Medication {
-  name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  instructions: string;
-}
+import { prescriptionsService, Prescription, CreatePrescriptionRequest } from "@/services/prescriptionsService";
+import { usePatients } from "@/hooks/usePatients";
 
 const commonMedications = [
   "Atorvastatin (Lipitor)",
@@ -48,97 +26,41 @@ const commonMedications = [
 
 export default function Prescriptions() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
-  const [patients, setPatients] = useState<any[]>([]);
+  const { patients, loading: patientsLoading } = usePatients();
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     patientId: "",
-    diagnosis: "",
-    instructions: "",
+    medicationName: "",
+    dosage: "",
+    frequency: "",
     duration: "",
-    followUpDate: "",
-    pharmacy: ""
+    instructions: ""
   });
-  const [medications, setMedications] = useState<Medication[]>([
-    { name: "", dosage: "", frequency: "", duration: "", instructions: "" }
-  ]);
   const { toast } = useToast();
 
   useEffect(() => {
     loadPrescriptions();
-    loadPatients();
   }, []);
 
-  const loadPrescriptions = () => {
+  const loadPrescriptions = async () => {
     try {
-      const stored = localStorage.getItem('cvms_prescriptions');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Filter out pharmacy prescriptions and only get the main prescriptions
-        const mainPrescriptions = parsed.filter((p: any) => 
-          p.medications && Array.isArray(p.medications)
-        );
-        setPrescriptions(mainPrescriptions || []);
-      } else {
-        setPrescriptions([]);
-      }
+      setLoading(true);
+      const data = await prescriptionsService.getAll();
+      setPrescriptions(data);
     } catch (error) {
       console.error('Error loading prescriptions:', error);
-      setPrescriptions([]);
+      toast({
+        title: "Error",
+        description: "Failed to load prescriptions",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadPatients = () => {
-    try {
-      const stored = localStorage.getItem('cvms_patients') || localStorage.getItem('cardiovascular-patients') || localStorage.getItem('patients');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setPatients(Array.isArray(parsed) ? parsed : []);
-      } else {
-        setPatients([]);
-      }
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      setPatients([]);
-    }
-  };
-
-  const loadPatientAnalysis = (patientId: string) => {
-    try {
-      const analyses = JSON.parse(localStorage.getItem('cvms_analyses') || localStorage.getItem('cardiovascular-analyses') || '[]');
-      return analyses.find((analysis: any) => analysis.patient_id === patientId);
-    } catch (error) {
-      console.error('Error loading patient analysis:', error);
-      return null;
-    }
-  };
-
-  const getPatientsWithAnalysis = () => {
-    try {
-      const analyses = JSON.parse(localStorage.getItem('cvms_analyses') || localStorage.getItem('cardiovascular-analyses') || '[]');
-      return new Set(analyses.map((a: any) => a.patient_id));
-    } catch (error) {
-      console.error('Error getting patients with analysis:', error);
-      return new Set();
-    }
-  };
-
-  const addMedication = () => {
-    setMedications([...medications, { name: "", dosage: "", frequency: "", duration: "", instructions: "" }]);
-  };
-
-  const removeMedication = (index: number) => {
-    if (medications.length > 1) {
-      setMedications(medications.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateMedication = (index: number, field: keyof Medication, value: string) => {
-    const updated = medications.map((med, i) => 
-      i === index ? { ...med, [field]: value } : med
-    );
-    setMedications(updated);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const selectedPatient = patients.find(p => p.id === formData.patientId);
@@ -152,109 +74,69 @@ export default function Prescriptions() {
       return;
     }
 
-    const validMedications = medications.filter(med => med.name && med.dosage);
-    
-    if (validMedications.length === 0) {
+    if (!formData.medicationName || !formData.dosage) {
       toast({
         title: "Error",
-        description: "Please add at least one medication",
+        description: "Please enter medication name and dosage",
         variant: "destructive",
       });
       return;
     }
 
-    // Get analysis recommendations for this patient
-    const patientAnalysis = loadPatientAnalysis(formData.patientId);
-    
-    const newPrescription: Prescription = {
-      id: Date.now().toString(),
-      patientId: formData.patientId,
-      patientName: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
-      doctorId: "current-doctor",
-      doctorName: "Dr. Current Doctor",
-      medications: validMedications,
-      diagnosis: formData.diagnosis || patientAnalysis?.diagnosis || '',
-      instructions: formData.instructions,
-      duration: formData.duration,
-      followUpDate: formData.followUpDate,
-      status: 'active',
-      prescribedAt: new Date().toISOString(),
-      pharmacy: formData.pharmacy
-    };
+    setSubmitting(true);
 
-    const updatedPrescriptions = [newPrescription, ...(prescriptions || [])];
-    setPrescriptions(updatedPrescriptions);
-    
-    // Save main prescription
-    localStorage.setItem('cvms_prescriptions', JSON.stringify(updatedPrescriptions));
-    
-    // Also save individual medication prescriptions for pharmacy
     try {
-      const existingPharmacyPrescriptions = JSON.parse(localStorage.getItem('cvms_prescriptions') || '[]');
-      const pharmacyPrescriptions = Array.isArray(existingPharmacyPrescriptions) ? [...existingPharmacyPrescriptions] : [];
-      
-      validMedications.forEach(med => {
-        pharmacyPrescriptions.push({
-          id: `rx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          patient_id: formData.patientId,
-          patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
-          doctor_id: 'current-doctor',
-          medication_name: med.name,
-          dosage: med.dosage,
-          frequency: med.frequency,
-          duration: med.duration,
-          instructions: med.instructions,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        });
+      const prescriptionData: CreatePrescriptionRequest = {
+        patient_id: formData.patientId,
+        doctor_id: "current-doctor", // Replace with actual doctor ID from auth
+        medication_name: formData.medicationName,
+        dosage: formData.dosage,
+        frequency: formData.frequency,
+        duration: formData.duration,
+        instructions: formData.instructions
+      };
+
+      const newPrescription = await prescriptionsService.create(prescriptionData);
+      setPrescriptions(prev => [newPrescription, ...prev]);
+
+      // Reset form
+      setFormData({
+        patientId: "",
+        medicationName: "",
+        dosage: "",
+        frequency: "",
+        duration: "",
+        instructions: ""
       });
-      
-      localStorage.setItem('cvms_prescriptions', JSON.stringify(pharmacyPrescriptions));
+
+      toast({
+        title: "Success",
+        description: "Prescription created successfully",
+      });
     } catch (error) {
-      console.error('Error saving pharmacy prescriptions:', error);
-    }
-
-    // Reset form
-    setFormData({
-      patientId: "",
-      diagnosis: "",
-      instructions: "",
-      duration: "",
-      followUpDate: "",
-      pharmacy: ""
-    });
-    setMedications([{ name: "", dosage: "", frequency: "", duration: "", instructions: "" }]);
-
-    toast({
-      title: "Success",
-      description: "Prescription created successfully",
-    });
-  };
-
-  const updatePrescriptionStatus = (prescriptionId: string, newStatus: string) => {
-    const updatedPrescriptions = (prescriptions || []).map(p => 
-      p.id === prescriptionId ? { ...p, status: newStatus as any } : p
-    );
-    setPrescriptions(updatedPrescriptions);
-    localStorage.setItem('cvms_prescriptions', JSON.stringify(updatedPrescriptions));
-
-    toast({
-      title: "Status Updated",
-      description: `Prescription status changed to ${newStatus}`,
-    });
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-500 text-white';
-      case 'completed': return 'bg-gray-500 text-white';
-      case 'discontinued': return 'bg-red-500 text-white';
-      default: return 'bg-gray-500 text-white';
+      console.error('Error creating prescription:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create prescription",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // Safe array for mapping
-  const safePrescriptions = Array.isArray(prescriptions) ? prescriptions : [];
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find(p => p.id === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -281,118 +163,75 @@ export default function Prescriptions() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="patient">Select Patient</Label>
-                <Select value={formData.patientId} onValueChange={(value) => {
-                  setFormData({...formData, patientId: value});
-                  // Auto-fill diagnosis from analysis if available
-                  const analysis = loadPatientAnalysis(value);
-                  if (analysis) {
-                    setFormData(prev => ({...prev, patientId: value, diagnosis: analysis.diagnosis || ''}));
-                  }
-                }}>
+                <Select 
+                  value={formData.patientId} 
+                  onValueChange={(value) => setFormData({...formData, patientId: value})}
+                  disabled={patientsLoading}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose patient..." />
+                    <SelectValue placeholder={patientsLoading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.isArray(patients) && patients.map((patient) => {
-                      const hasAnalysis = getPatientsWithAnalysis().has(patient.id);
-                      return (
-                        <SelectItem key={patient.id} value={patient.id}>
-                          {patient.first_name} {patient.last_name} - {patient.patient_id}
-                          {hasAnalysis && " 💊"}
-                        </SelectItem>
-                      );
-                    })}
+                    {patients.map((patient) => (
+                      <SelectItem key={patient.id} value={patient.id}>
+                        {patient.firstName} {patient.lastName} - {patient.patientId}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="diagnosis">Diagnosis</Label>
-                <Input
-                  id="diagnosis"
-                  placeholder="Hypertension, Angina, etc."
-                  value={formData.diagnosis}
-                  onChange={(e) => setFormData({...formData, diagnosis: e.target.value})}
-                  required
-                />
-                {formData.patientId && loadPatientAnalysis(formData.patientId) && (
-                  <p className="text-sm text-muted-foreground">
-                    From analysis: {loadPatientAnalysis(formData.patientId)?.diagnosis}
-                  </p>
-                )}
+                <Label htmlFor="medication">Medication</Label>
+                <Select 
+                  value={formData.medicationName} 
+                  onValueChange={(value) => setFormData({...formData, medicationName: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select medication..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {commonMedications.map((med) => (
+                      <SelectItem key={med} value={med}>{med}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Medications</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addMedication}>
-                    Add Medication
-                  </Button>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dosage">Dosage</Label>
+                  <Input
+                    id="dosage"
+                    placeholder="e.g., 10mg"
+                    value={formData.dosage}
+                    onChange={(e) => setFormData({...formData, dosage: e.target.value})}
+                    required
+                  />
                 </div>
-                
-                {medications.map((medication, index) => (
-                  <div key={index} className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Medication {index + 1}</span>
-                      {medications.length > 1 && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => removeMedication(index)}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Select 
-                        value={medication.name} 
-                        onValueChange={(value) => updateMedication(index, 'name', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select medication..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {commonMedications.map((med) => (
-                            <SelectItem key={med} value={med}>{med}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Dosage (e.g., 10mg)"
-                        value={medication.dosage}
-                        onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
-                      />
-                      <Input
-                        placeholder="Frequency (e.g., Once daily)"
-                        value={medication.frequency}
-                        onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Duration (e.g., 30 days)"
-                        value={medication.duration}
-                        onChange={(e) => updateMedication(index, 'duration', e.target.value)}
-                      />
-                      <Input
-                        placeholder="Special instructions"
-                        value={medication.instructions}
-                        onChange={(e) => updateMedication(index, 'instructions', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  <Label htmlFor="frequency">Frequency</Label>
+                  <Input
+                    id="frequency"
+                    placeholder="e.g., Once daily"
+                    value={formData.frequency}
+                    onChange={(e) => setFormData({...formData, frequency: e.target.value})}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="instructions">General Instructions</Label>
+                <Label htmlFor="duration">Duration</Label>
+                <Input
+                  id="duration"
+                  placeholder="e.g., 30 days"
+                  value={formData.duration}
+                  onChange={(e) => setFormData({...formData, duration: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="instructions">Instructions</Label>
                 <Textarea
                   id="instructions"
                   placeholder="Take with food, avoid alcohol, etc."
@@ -402,39 +241,19 @@ export default function Prescriptions() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Treatment Duration</Label>
-                  <Input
-                    id="duration"
-                    placeholder="e.g., 3 months"
-                    value={formData.duration}
-                    onChange={(e) => setFormData({...formData, duration: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="followUpDate">Follow-up Date</Label>
-                  <Input
-                    id="followUpDate"
-                    type="date"
-                    value={formData.followUpDate}
-                    onChange={(e) => setFormData({...formData, followUpDate: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="pharmacy">Preferred Pharmacy</Label>
-                <Input
-                  id="pharmacy"
-                  placeholder="Pharmacy name and location"
-                  value={formData.pharmacy}
-                  onChange={(e) => setFormData({...formData, pharmacy: e.target.value})}
-                />
-              </div>
-
-              <Button type="submit" className="w-full">
-                Create Prescription
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={submitting || patientsLoading}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Prescription'
+                )}
               </Button>
             </form>
           </CardContent>
@@ -453,65 +272,40 @@ export default function Prescriptions() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {safePrescriptions.length === 0 ? (
+              {loading ? (
+                <div className="flex justify-center items-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : prescriptions.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <Pill className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No prescriptions created yet</p>
                 </div>
               ) : (
-                safePrescriptions.map((prescription) => (
+                prescriptions.map((prescription) => (
                   <div key={prescription.id} className="p-4 bg-background rounded-lg border">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="font-medium">{prescription.patientName}</div>
-                      <Badge className={getStatusBadgeColor(prescription.status)}>
-                        {prescription.status.toUpperCase()}
-                      </Badge>
+                      <div className="font-medium">{getPatientName(prescription.patient_id)}</div>
+                      <Badge variant="default">Active</Badge>
                     </div>
-                    
                     <div className="space-y-2 text-sm">
-                      <div><strong>Diagnosis:</strong> {prescription.diagnosis}</div>
-                      <div><strong>Doctor:</strong> {prescription.doctorName}</div>
-                      
-                      <div className="space-y-1">
-                        <strong>Medications:</strong>
-                        {prescription.medications.map((med, index) => (
-                          <div key={index} className="ml-4 text-muted-foreground">
-                            • {med.name} - {med.dosage}, {med.frequency}
-                            {med.duration && ` for ${med.duration}`}
-                          </div>
-                        ))}
+                      <div>
+                        <span className="font-medium">{prescription.medication_name}</span>
                       </div>
-                      
+                      <div className="text-muted-foreground">
+                        <div>Dosage: {prescription.dosage}</div>
+                        <div>Frequency: {prescription.frequency}</div>
+                        <div>Duration: {prescription.duration}</div>
+                      </div>
                       {prescription.instructions && (
-                        <div><strong>Instructions:</strong> {prescription.instructions}</div>
+                        <div className="text-xs text-muted-foreground mt-2">
+                          <span className="font-medium">Instructions:</span> {prescription.instructions}
+                        </div>
                       )}
-                      
-                      {prescription.followUpDate && (
-                        <div><strong>Follow-up:</strong> {prescription.followUpDate}</div>
-                      )}
-                      
-                      <div className="text-xs text-muted-foreground">
-                        Prescribed: {new Date(prescription.prescribedAt).toLocaleString()}
+                      <div className="text-xs text-muted-foreground pt-2 border-t">
+                        Prescribed: {formatDate(prescription.created_at)}
                       </div>
                     </div>
-                    
-                    {prescription.status === 'active' && (
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => updatePrescriptionStatus(prescription.id, 'completed')}
-                        >
-                          Mark Completed
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updatePrescriptionStatus(prescription.id, 'discontinued')}
-                        >
-                          Discontinue
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 ))
               )}

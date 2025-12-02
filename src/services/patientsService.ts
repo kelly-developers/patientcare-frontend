@@ -25,6 +25,11 @@ export interface Patient {
   current_medications?: string;
   consentAccepted?: boolean;
   consentFormPath?: string;
+  researchConsent?: boolean;
+  research_consent?: boolean;
+  research_consent_date?: string;
+  sampleStorageConsent?: boolean;
+  sample_storage?: boolean;
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;
@@ -46,6 +51,8 @@ export interface CreatePatientRequest {
   currentMedications?: string;
   consentAccepted: boolean;
   consentFormPath?: string;
+  researchConsent?: boolean;
+  sampleStorageConsent?: boolean;
 }
 
 export const patientsService = {

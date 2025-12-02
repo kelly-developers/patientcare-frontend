@@ -39,13 +39,12 @@ import { Patient } from "@/services/patientsService";
 // Helper functions moved outside the component
 const hasResearchConsent = (patient: Patient) => {
   return patient?.researchConsent === true || 
-         patient?.research_consent?.dataUse === true ||
          patient?.research_consent === true;
 };
 
 const hasSampleStorage = (patient: Patient) => {
   return patient?.sampleStorageConsent === true || 
-         patient?.sample_storage?.storeSamples === true;
+         patient?.sample_storage === true;
 };
 
 const formatPatientDate = (dateString: any) => {
