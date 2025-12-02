@@ -13,8 +13,8 @@ import { useNavigate } from "react-router-dom";
 import { usePatients } from "@/hooks/usePatients";
 
 interface Patient {
-  id: string; // This is the numeric ID from backend (stored as string for Select component)
-  patientId: string; // This is the generated patient ID like "HOSP-2024-XXXXX"
+  id: string;
+  patientId: string;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
@@ -23,32 +23,32 @@ interface Patient {
 
 interface VitalData {
   id: string;
-  patientId: number; // Important: This is the numeric patient ID
-  systolicBP: number;
-  diastolicBP: number;
+  patientId: number;
+  systolicBp: number;
+  diastolicBp: number;
   heartRate: number;
   temperature: number;
-  weight: number;
-  height: number;
+  weight?: number;
+  height?: number;
   oxygenSaturation: number;
   bloodGlucose?: number;
   respiratoryRate?: number;
   painLevel?: number;
   notes?: string;
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   recordedAt: string;
-  recordedByName: string;
+  recordedBy: string;
 }
 
 export default function VitalDataCollection() {
   const [vitals, setVitals] = useState<VitalData[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<string>(""); // Store patient ID (string)
+  const [selectedPatient, setSelectedPatient] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    systolicBP: "",
-    diastolicBP: "",
+    systolicBp: "", // Fixed: lowercase 'p'
+    diastolicBp: "", // Fixed: lowercase 'p'
     heartRate: "",
     respiratoryRate: "",
     temperature: "",
@@ -72,7 +72,7 @@ export default function VitalDataCollection() {
   useEffect(() => {
     if (backendPatients && backendPatients.length > 0) {
       const processedPatients = backendPatients.map((patient: any) => ({
-        id: patient.id?.toString() || '', // Convert to string for Select component
+        id: patient.id?.toString() || '',
         patientId: patient.patientId || patient.patient_id || `HOSP-${new Date().getFullYear()}-${patient.id}`,
         firstName: patient.firstName || patient.first_name || '',
         lastName: patient.lastName || patient.last_name || '',
@@ -104,39 +104,28 @@ export default function VitalDataCollection() {
       const vitalsData = await getVitalsRecordedByMe();
       if (vitalsData && Array.isArray(vitalsData)) {
         const vitalsWithRisk = vitalsData.map((vital: any) => ({
-          ...vital,
-          riskLevel: calculateRiskLevel(vital)
+          id: vital.id?.toString() || '',
+          patientId: vital.patient?.id || vital.patientId || 0,
+          systolicBp: vital.systolicBp || vital.systolicBP || 0,
+          diastolicBp: vital.diastolicBp || vital.diastolicBP || 0,
+          heartRate: vital.heartRate || 0,
+          temperature: vital.temperature || 0,
+          weight: vital.weight || 0,
+          height: vital.height || 0,
+          oxygenSaturation: vital.oxygenSaturation || 0,
+          bloodGlucose: vital.bloodGlucose || null,
+          respiratoryRate: vital.respiratoryRate || null,
+          painLevel: vital.painLevel || null,
+          notes: vital.notes || '',
+          riskLevel: vital.riskLevel || 'LOW',
+          recordedAt: vital.createdAt || vital.recordedAt || new Date().toISOString(),
+          recordedBy: vital.recordedBy || 'Unknown'
         }));
         setVitals(vitalsWithRisk);
       }
     } catch (error: any) {
       console.error('Error loading vital data:', error);
     }
-  };
-
-  const calculateRiskLevel = (vitals: any): 'low' | 'medium' | 'high' | 'critical' => {
-    const systolic = vitals.systolicBP || vitals.systolic;
-    const diastolic = vitals.diastolicBP || vitals.diastolic;
-    const heartRate = vitals.heartRate;
-    const oxygenSat = vitals.oxygenSaturation || vitals.oxygen;
-
-    if (!systolic || !diastolic || !heartRate || !oxygenSat) {
-      return 'low';
-    }
-
-    // Critical conditions
-    if (systolic > 180 || diastolic > 120 || heartRate > 120 || heartRate < 50 || oxygenSat < 90) {
-      return 'critical';
-    }
-    // High risk
-    if (systolic > 160 || diastolic > 100 || heartRate > 100 || oxygenSat < 95) {
-      return 'high';
-    }
-    // Medium risk
-    if (systolic > 140 || diastolic > 90 || heartRate > 80) {
-      return 'medium';
-    }
-    return 'low';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,7 +141,7 @@ export default function VitalDataCollection() {
     }
 
     // Validate required fields
-    const requiredFields = ['systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation'];
+    const requiredFields = ['systolicBp', 'diastolicBp', 'heartRate', 'temperature', 'oxygenSaturation'];
     const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
     
     if (missingFields.length > 0) {
@@ -164,9 +153,9 @@ export default function VitalDataCollection() {
       return;
     }
 
-    // Validate numeric ranges
-    const systolic = parseInt(formData.systolicBP);
-    const diastolic = parseInt(formData.diastolicBP);
+    // Validate numeric values
+    const systolic = parseInt(formData.systolicBp);
+    const diastolic = parseInt(formData.diastolicBp);
     const heartRate = parseInt(formData.heartRate);
     const temperature = parseFloat(formData.temperature);
     const oxygenSat = parseFloat(formData.oxygenSaturation);
@@ -219,20 +208,22 @@ export default function VitalDataCollection() {
     setSubmitting(true);
 
     try {
-      // Prepare the vital data request
+      // Prepare the vital data request - CORRECT field names
       const vitalDataRequest = {
         patientId: parseInt(selectedPatient), // Convert to number for backend
-        systolicBP: systolic,
-        diastolicBP: diastolic,
+        systolicBp: systolic, // Fixed: lowercase 'p'
+        diastolicBp: diastolic, // Fixed: lowercase 'p'
         heartRate: heartRate,
         respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : undefined,
         temperature: temperature,
         oxygenSaturation: oxygenSat,
-        weight: formData.weight ? parseFloat(formData.weight) : 0,
-        height: formData.height ? parseFloat(formData.height) : 0,
-        bloodGlucose: formData.bloodGlucose ? parseFloat(formData.bloodGlucose) : undefined,
+        weight: formData.weight ? parseFloat(formData.weight) : undefined,
+        height: formData.height ? parseFloat(formData.height) : undefined,
+        bloodGlucose: formData.bloodGlucose ? parseInt(formData.bloodGlucose) : undefined,
         painLevel: formData.painLevel ? parseInt(formData.painLevel) : undefined,
-        notes: formData.notes || undefined
+        riskLevel: 'LOW', // Will be calculated in the service
+        notes: formData.notes || '',
+        recordedBy: 'current-user' // Will be set in the service
       };
 
       console.log('📝 Submitting vital data:', vitalDataRequest);
@@ -242,8 +233,8 @@ export default function VitalDataCollection() {
       
       // Reset form
       setFormData({
-        systolicBP: "",
-        diastolicBP: "",
+        systolicBp: "",
+        diastolicBp: "",
         heartRate: "",
         respiratoryRate: "",
         temperature: "",
@@ -277,10 +268,10 @@ export default function VitalDataCollection() {
 
   const getRiskBadgeColor = (risk: string) => {
     switch (risk) {
-      case 'critical': return 'bg-red-500 text-white';
-      case 'high': return 'bg-orange-500 text-white';
-      case 'medium': return 'bg-yellow-500 text-black';
-      case 'low': return 'bg-green-500 text-white';
+      case 'CRITICAL': return 'bg-red-500 text-white';
+      case 'HIGH': return 'bg-orange-500 text-white';
+      case 'MEDIUM': return 'bg-yellow-500 text-black';
+      case 'LOW': return 'bg-green-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
   };
@@ -367,13 +358,13 @@ export default function VitalDataCollection() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="systolic">Blood Pressure (Systolic) *</Label>
+                  <Label htmlFor="systolicBp">Blood Pressure (Systolic) *</Label>
                   <Input
-                    id="systolic"
+                    id="systolicBp"
                     type="number"
                     placeholder="120"
-                    value={formData.systolicBP}
-                    onChange={(e) => setFormData({...formData, systolicBP: e.target.value})}
+                    value={formData.systolicBp}
+                    onChange={(e) => setFormData({...formData, systolicBp: e.target.value})}
                     required
                     min="50"
                     max="250"
@@ -381,13 +372,13 @@ export default function VitalDataCollection() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="diastolic">Blood Pressure (Diastolic) *</Label>
+                  <Label htmlFor="diastolicBp">Blood Pressure (Diastolic) *</Label>
                   <Input
-                    id="diastolic"
+                    id="diastolicBp"
                     type="number"
                     placeholder="80"
-                    value={formData.diastolicBP}
-                    onChange={(e) => setFormData({...formData, diastolicBP: e.target.value})}
+                    value={formData.diastolicBp}
+                    onChange={(e) => setFormData({...formData, diastolicBp: e.target.value})}
                     required
                     min="30"
                     max="150"
@@ -443,9 +434,9 @@ export default function VitalDataCollection() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oxygenSat">O2 Saturation (%) *</Label>
+                  <Label htmlFor="oxygenSaturation">O2 Saturation (%) *</Label>
                   <Input
-                    id="oxygenSat"
+                    id="oxygenSaturation"
                     type="number"
                     placeholder="98"
                     value={formData.oxygenSaturation}
@@ -478,6 +469,7 @@ export default function VitalDataCollection() {
                   <Input
                     id="height"
                     type="number"
+                    step="0.1"
                     placeholder="170"
                     value={formData.height}
                     onChange={(e) => setFormData({...formData, height: e.target.value})}
@@ -565,11 +557,11 @@ export default function VitalDataCollection() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="font-medium">{getPatientById(vital.patientId)}</div>
                     <Badge className={getRiskBadgeColor(vital.riskLevel)}>
-                      {vital.riskLevel.toUpperCase()}
+                      {vital.riskLevel}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                    <div>BP: {vital.systolicBP}/{vital.diastolicBP}</div>
+                    <div>BP: {vital.systolicBp}/{vital.diastolicBp}</div>
                     <div>HR: {vital.heartRate} BPM</div>
                     <div>Temp: {vital.temperature}°C</div>
                     <div>O2: {vital.oxygenSaturation}%</div>
@@ -585,7 +577,7 @@ export default function VitalDataCollection() {
                     </div>
                   )}
                   <div className="mt-2 text-xs text-muted-foreground">
-                    {new Date(vital.recordedAt).toLocaleString()}
+                    Recorded by: {vital.recordedBy} • {new Date(vital.recordedAt).toLocaleString()}
                   </div>
                 </div>
               ))}

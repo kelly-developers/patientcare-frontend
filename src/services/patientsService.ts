@@ -2,7 +2,7 @@
 import { apiClient, API_ENDPOINTS } from '@/config/api';
 
 export interface Patient {
-  id: string; // Backend returns Long, but we'll store as string for consistency
+  id: string;
   patientId?: string;
   patient_id?: string;
   firstName?: string;
@@ -57,18 +57,20 @@ export interface CreatePatientRequest {
 }
 
 export interface VitalDataRequest {
-  patientId: number; // Important: Backend expects number (Long)
-  systolicBP: number;
-  diastolicBP: number;
+  patientId: number; // Must be number (Long) for backend
+  systolicBp: number; // Note: lowercase 'p' - matches backend
+  diastolicBp: number; // Note: lowercase 'p' - matches backend
   heartRate: number;
-  temperature: number;
-  weight: number;
-  height: number;
-  oxygenSaturation: number;
-  bloodGlucose?: number;
   respiratoryRate?: number;
+  temperature: number | string; // Will be converted to string for BigDecimal
+  oxygenSaturation: number;
+  height?: number | string; // Will be converted to string for BigDecimal
+  weight?: number | string; // Will be converted to string for BigDecimal
+  bloodGlucose?: number;
   painLevel?: number;
+  riskLevel: string; // REQUIRED: 'LOW', 'MEDIUM', 'HIGH', or 'CRITICAL'
   notes?: string;
+  recordedBy: string; // REQUIRED: username of current user
 }
 
 export const patientsService = {
@@ -276,12 +278,59 @@ export const patientsService = {
     try {
       console.log('📝 Recording vital data:', data);
       
-      // Validate required fields
-      if (!data.patientId || !data.systolicBP || !data.diastolicBP || !data.heartRate || !data.temperature || !data.oxygenSaturation) {
-        throw new Error('Missing required vital data fields');
+      // Get current user for recordedBy
+      const user = localStorage.getItem('patientcare_user');
+      let recordedBy = 'Unknown';
+      
+      if (user) {
+        try {
+          const userData = JSON.parse(user);
+          recordedBy = userData.username || userData.name || 'Unknown';
+        } catch (e) {
+          console.error('Error parsing user data:', e);
+        }
       }
+      
+      // Calculate risk level based on vital signs
+      const calculateRiskLevel = (): string => {
+        const { systolicBp, diastolicBp, heartRate, oxygenSaturation } = data;
+        
+        // Critical conditions
+        if (systolicBp > 180 || diastolicBp > 120 || heartRate > 120 || heartRate < 50 || oxygenSaturation < 90) {
+          return 'CRITICAL';
+        }
+        // High risk
+        if (systolicBp > 160 || diastolicBp > 100 || heartRate > 100 || oxygenSaturation < 95) {
+          return 'HIGH';
+        }
+        // Medium risk
+        if (systolicBp > 140 || diastolicBp > 90 || heartRate > 80) {
+          return 'MEDIUM';
+        }
+        return 'LOW';
+      };
 
-      const response = await apiClient.post(API_ENDPOINTS.VITAL_DATA.BASE, data);
+      // Prepare data for backend - convert numbers to strings for BigDecimal
+      const backendData = {
+        patientId: data.patientId,
+        systolicBp: data.systolicBp,
+        diastolicBp: data.diastolicBp,
+        heartRate: data.heartRate,
+        respiratoryRate: data.respiratoryRate || null,
+        temperature: data.temperature?.toString() || '0',
+        oxygenSaturation: data.oxygenSaturation,
+        height: data.height ? data.height.toString() : null,
+        weight: data.weight ? data.weight.toString() : null,
+        bloodGlucose: data.bloodGlucose || null,
+        painLevel: data.painLevel || null,
+        riskLevel: calculateRiskLevel(), // Calculate based on vital signs
+        notes: data.notes || '',
+        recordedBy: recordedBy // Use current user's username
+      };
+
+      console.log('📤 Sending to backend:', backendData);
+
+      const response = await apiClient.post(API_ENDPOINTS.VITAL_DATA.BASE, backendData);
       console.log('✅ Vital data recorded successfully:', response.data);
       return response.data;
     } catch (error: any) {
