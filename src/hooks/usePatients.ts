@@ -98,9 +98,12 @@ export const usePatients = () => {
       
       console.log('📝 Recording vital data:', vitalData);
       
-      // Validate required fields
-      const requiredFields = ['patientId', 'systolicBP', 'diastolicBP', 'heartRate', 'temperature', 'oxygenSaturation'];
-      const missingFields = requiredFields.filter(field => !vitalData[field as keyof VitalDataRequest]);
+      // Validate required fields - FIXED: use lowercase 'p' not uppercase 'P'
+      const requiredFields = ['patientId', 'systolicBp', 'diastolicBp', 'heartRate', 'temperature', 'oxygenSaturation'];
+      const missingFields = requiredFields.filter(field => {
+        const value = vitalData[field as keyof VitalDataRequest];
+        return value === undefined || value === null || value === '';
+      });
       
       if (missingFields.length > 0) {
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);

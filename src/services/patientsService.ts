@@ -68,9 +68,9 @@ export interface VitalDataRequest {
   weight?: number | string; // Will be converted to string for BigDecimal
   bloodGlucose?: number;
   painLevel?: number;
-  riskLevel: string; // REQUIRED: 'LOW', 'MEDIUM', 'HIGH', or 'CRITICAL'
+  riskLevel?: string; // Will be calculated in service
   notes?: string;
-  recordedBy: string; // REQUIRED: username of current user
+  recordedBy?: string; // Will be set in service
 }
 
 export const patientsService = {

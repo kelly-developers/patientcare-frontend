@@ -47,8 +47,8 @@ export default function VitalDataCollection() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    systolicBp: "", // Fixed: lowercase 'p'
-    diastolicBp: "", // Fixed: lowercase 'p'
+    systolicBp: "",
+    diastolicBp: "",
     heartRate: "",
     respiratoryRate: "",
     temperature: "",
@@ -211,8 +211,8 @@ export default function VitalDataCollection() {
       // Prepare the vital data request - CORRECT field names
       const vitalDataRequest = {
         patientId: parseInt(selectedPatient), // Convert to number for backend
-        systolicBp: systolic, // Fixed: lowercase 'p'
-        diastolicBp: diastolic, // Fixed: lowercase 'p'
+        systolicBp: systolic,
+        diastolicBp: diastolic,
         heartRate: heartRate,
         respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : undefined,
         temperature: temperature,
