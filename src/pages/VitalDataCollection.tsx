@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 
 interface Patient {
   id: string;
-  patientId: string;
+  patientId?: string; // Make optional since backend might return 'id' instead
   firstName: string;
   lastName: string;
   dateOfBirth: string;
@@ -116,19 +116,39 @@ export default function VitalDataCollection() {
         }
       });
       
+      console.log('Response status:', response.status);
+      
       if (response.ok) {
         const result = await response.json();
-        console.log('Patients loaded successfully:', result.data?.length || 0, 'patients');
+        console.log('Patients API response:', result);
+        
         if (result.success) {
+          // IMPORTANT FIX: Check the actual structure of the response
           const patientsData = result.data.map((patient: any) => ({
-            id: patient.id,
-            patientId: patient.id,
-            firstName: patient.firstName,
-            lastName: patient.lastName,
-            dateOfBirth: patient.dateOfBirth,
+            id: patient.id, // Use 'id' from backend
+            patientId: patient.patientId || patient.id, // Fallback to id if patientId doesn't exist
+            firstName: patient.firstName || patient.firstname,
+            lastName: patient.lastName || patient.lastname,
+            dateOfBirth: patient.dateOfBirth || patient.dateofbirth || patient.dob,
             gender: patient.gender
           }));
+          
+          console.log('Processed patients data:', patientsData);
           setPatients(patientsData);
+          
+          if (patientsData.length > 0) {
+            toast({
+              title: "Patients Loaded",
+              description: `Successfully loaded ${patientsData.length} patients`,
+            });
+          }
+        } else {
+          console.error('API returned success: false', result);
+          toast({
+            title: "No Patients Found",
+            description: "No patient records available. Please register patients first.",
+            variant: "destructive",
+          });
         }
       } else if (response.status === 401) {
         toast({
@@ -140,13 +160,14 @@ export default function VitalDataCollection() {
         navigate('/auth');
       } else {
         const errorText = await response.text();
-        throw new Error(`Failed to load patients: ${response.status} ${errorText}`);
+        console.error('API Error:', errorText);
+        throw new Error(`Failed to load patients: ${response.status} ${response.statusText}`);
       }
     } catch (error: any) {
       console.error('Error loading patients:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to load patients",
+        description: error.message || "Failed to load patients. Please check your connection.",
         variant: "destructive",
       });
     } finally {
@@ -168,7 +189,9 @@ export default function VitalDataCollection() {
       
       if (response.ok) {
         const result = await response.json();
-        if (result.success) {
+        console.log('Vitals API response:', result);
+        
+        if (result.success && result.data) {
           // Add risk level to each vital record
           const vitalsWithRisk = result.data.map((vital: any) => ({
             ...vital,
@@ -188,10 +211,10 @@ export default function VitalDataCollection() {
   };
 
   const calculateRiskLevel = (vitals: any): 'low' | 'medium' | 'high' | 'critical' => {
-    const systolic = vitals.systolicBP;
-    const diastolic = vitals.diastolicBP;
+    const systolic = vitals.systolicBP || vitals.systolic;
+    const diastolic = vitals.diastolicBP || vitals.diastolic;
     const heartRate = vitals.heartRate;
-    const oxygenSat = vitals.oxygenSaturation;
+    const oxygenSat = vitals.oxygenSaturation || vitals.oxygen;
 
     if (!systolic || !diastolic || !heartRate || !oxygenSat) {
       return 'low';
@@ -340,6 +363,8 @@ export default function VitalDataCollection() {
         throw new Error('Invalid response from server');
       }
 
+      console.log('Vital data submission response:', result);
+
       if (response.ok) {
         if (result.success) {
           const newVital = result.data;
@@ -371,7 +396,7 @@ export default function VitalDataCollection() {
 
           toast({
             title: "Success",
-            description: `Vital data recorded successfully. Risk level: ${riskLevel.toUpperCase()}`,
+            description: `Vital data recorded successfully for patient ${getPatientName(selectedPatient)}. Risk level: ${riskLevel.toUpperCase()}`,
           });
 
           // Reload vitals to ensure we have the latest data
@@ -405,7 +430,7 @@ export default function VitalDataCollection() {
   };
 
   const getPatientName = (patientId: string) => {
-    const patient = patients.find(p => p.patientId === patientId);
+    const patient = patients.find(p => p.id === patientId || p.patientId === patientId);
     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
@@ -462,24 +487,40 @@ export default function VitalDataCollection() {
                     <SelectValue placeholder={loading ? "Loading patients..." : "Choose patient..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {patients.map((patient) => (
-                      <SelectItem key={patient.id} value={patient.id}>
-                        {patient.firstName} {patient.lastName} - {patient.id}
-                      </SelectItem>
-                    ))}
+                    {patients.length > 0 ? (
+                      patients.map((patient) => (
+                        <SelectItem 
+                          key={patient.id} 
+                          value={patient.id} // Use patient.id as value
+                        >
+                          {patient.firstName} {patient.lastName} - {patient.patientId || patient.id}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No patients found
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
-                {loading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading patients...
-                  </div>
-                )}
-                {!loading && patients.length === 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    No patients found. Please register patients first.
-                  </div>
-                )}
+                <div className="flex justify-between items-center">
+                  {loading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading patients...
+                    </div>
+                  )}
+                  {!loading && patients.length === 0 && (
+                    <div className="text-sm text-muted-foreground">
+                      No patients found. Please register patients first.
+                    </div>
+                  )}
+                  {!loading && patients.length > 0 && (
+                    <div className="text-sm text-muted-foreground">
+                      {patients.length} patient(s) found
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
