@@ -122,7 +122,7 @@ export default function VitalDataCollection() {
         if (result.success) {
           const patientsData = result.data.map((patient: any) => ({
             id: patient.id,
-            patientId: patient.patientId,
+            patientId: patient.id,
             firstName: patient.firstName,
             lastName: patient.lastName,
             dateOfBirth: patient.dateOfBirth,
@@ -463,8 +463,8 @@ export default function VitalDataCollection() {
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
-                      <SelectItem key={patient.patientId} value={patient.patientId}>
-                        {patient.firstName} {patient.lastName} - {patient.patientId}
+                      <SelectItem key={patient.id} value={patient.id}>
+                        {patient.firstName} {patient.lastName} - {patient.id}
                       </SelectItem>
                     ))}
                   </SelectContent>
