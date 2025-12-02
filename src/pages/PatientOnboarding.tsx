@@ -481,14 +481,20 @@ Date: ___________________
     try {
       console.log('📝 Submitting patient data:', patientData);
       
-      // Enhanced validation
-      const requiredFields = ['first_name', 'last_name', 'date_of_birth', 'gender'];
-      const missingFields = requiredFields.filter(field => !patientData[field]);
+      // Enhanced validation with proper field names
+      const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'gender'];
+      const missingFields = requiredFields.filter(field => {
+        // Map from snake_case to camelCase for checking
+        const snakeCaseField = field
+          .replace(/([A-Z])/g, '_$1')
+          .toLowerCase();
+        return !patientData[snakeCaseField] && !patientData[field];
+      });
       
       if (missingFields.length > 0) {
         toast({
           title: "Missing required information",
-          description: `Please fill in: ${missingFields.join(', ').replace(/_/g, ' ')}`,
+          description: `Please fill in: ${missingFields.join(', ')}`,
           variant: "destructive"
         });
         return;
@@ -514,11 +520,12 @@ Date: ___________________
       }
 
       // Enhanced date validation
-      const dob = new Date(patientData.date_of_birth);
+      const dob = patientData.date_of_birth || patientData.dateOfBirth;
+      const dobDate = new Date(dob);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      if (isNaN(dob.getTime())) {
+      if (isNaN(dobDate.getTime())) {
         toast({
           title: "Invalid date format",
           description: "Please enter a valid date of birth in YYYY-MM-DD format",
@@ -527,7 +534,7 @@ Date: ___________________
         return;
       }
 
-      if (dob > today) {
+      if (dobDate > today) {
         toast({
           title: "Invalid date of birth",
           description: "Date of birth cannot be in the future",
@@ -537,7 +544,7 @@ Date: ___________________
       }
 
       // Validate age
-      const ageInMs = today.getTime() - dob.getTime();
+      const ageInMs = today.getTime() - dobDate.getTime();
       const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
       
       if (ageInYears > 120) {
@@ -561,42 +568,44 @@ Date: ___________________
       // Create FormData to handle file uploads
       const formData = new FormData();
       
-      // Add patient data
-      formData.append('firstName', patientData.first_name);
-      formData.append('lastName', patientData.last_name);
-      formData.append('dateOfBirth', patientData.date_of_birth);
-      formData.append('gender', patientData.gender);
+      // Add patient data with CORRECT camelCase field names for backend
+      // Map from snake_case (from PatientForm) to camelCase (backend expects)
+      formData.append('firstName', patientData.first_name || patientData.firstName || '');
+      formData.append('lastName', patientData.last_name || patientData.lastName || '');
+      formData.append('dateOfBirth', patientData.date_of_birth || patientData.dateOfBirth || '');
+      formData.append('gender', patientData.gender || '');
       formData.append('phone', patientData.phone || '');
       formData.append('email', patientData.email || '');
       formData.append('address', patientData.address || '');
-      formData.append('emergencyContactName', patientData.emergency_contact_name || '');
-      formData.append('emergencyContactPhone', patientData.emergency_contact_phone || '');
-      formData.append('medicalHistory', patientData.medical_history || '');
+      formData.append('emergencyContactName', patientData.emergency_contact_name || patientData.emergencyContactName || '');
+      formData.append('emergencyContactPhone', patientData.emergency_contact_phone || patientData.emergencyContactPhone || '');
+      formData.append('medicalHistory', patientData.medical_history || patientData.medicalHistory || '');
       formData.append('allergies', patientData.allergies || '');
-      formData.append('currentMedications', patientData.current_medications || '');
+      formData.append('currentMedications', patientData.current_medications || patientData.currentMedications || '');
       
       // Add patient consent information
-      formData.append('consentAccepted', patientData.consentAccepted.toString());
-      formData.append('consentDate', new Date().toISOString());
-      formData.append('consentFile', patientData.consentFile);
+      formData.append('consentAccepted', (patientData.consentAccepted || false).toString());
+      formData.append('consentFormPath', patientData.consentFile?.name || '');
       
       // Add research consent information
       formData.append('researchConsent', researchConsent.dataUse.toString());
-      formData.append('researchConsentDate', researchConsent.dataUse ? (researchConsent.consentDate || new Date()).toISOString() : '');
-      formData.append('futureContactConsent', researchConsent.futureContact.toString());
       formData.append('anonymizedDataConsent', researchConsent.anonymizedData.toString());
+      formData.append('futureContactConsent', researchConsent.futureContact.toString());
+      
+      if (researchConsent.consentDate) {
+        formData.append('researchConsentDate', researchConsent.consentDate.toISOString());
+      }
       
       // Add research consent file if exists
       if (researchConsentFile) {
         formData.append('researchConsentFile', researchConsentFile);
       }
-      
-      // System fields
-      formData.append('registrationDate', new Date().toISOString());
-      formData.append('status', "active");
-      formData.append('lastUpdated', new Date().toISOString());
 
       console.log('🚀 Submitting form data with files');
+      console.log('FormData contents:');
+      for (let [key, value] of (formData as any).entries()) {
+        console.log(`${key}:`, value);
+      }
       
       // You'll need to update your addPatient function to handle FormData
       await addPatient(formData);
