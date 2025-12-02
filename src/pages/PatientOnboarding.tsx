@@ -1,3 +1,4 @@
+// PatientOnboarding.tsx
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -481,15 +482,32 @@ Date: ___________________
     try {
       console.log('📝 Submitting patient data:', patientData);
       
-      // Enhanced validation with proper field names
+      // Map snake_case to camelCase for backend
+      const mappedData = {
+        firstName: patientData.first_name || '',
+        lastName: patientData.last_name || '',
+        dateOfBirth: patientData.date_of_birth || '',
+        gender: patientData.gender || '',
+        phone: patientData.phone || '',
+        email: patientData.email || '',
+        address: patientData.address || '',
+        emergencyContactName: patientData.emergency_contact_name || '',
+        emergencyContactPhone: patientData.emergency_contact_phone || '',
+        medicalHistory: patientData.medical_history || '',
+        allergies: patientData.allergies || '',
+        currentMedications: patientData.current_medications || '',
+        consentAccepted: patientData.consentAccepted || false,
+        consentFormPath: patientData.consentFile?.name || '',
+        researchConsent: researchConsent.dataUse,
+        sampleStorageConsent: false,
+        anonymizedDataConsent: researchConsent.anonymizedData,
+        futureContactConsent: researchConsent.futureContact,
+        researchConsentDate: researchConsent.consentDate ? researchConsent.consentDate.toISOString() : null
+      };
+
+      // Enhanced validation
       const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'gender'];
-      const missingFields = requiredFields.filter(field => {
-        // Map from snake_case to camelCase for checking
-        const snakeCaseField = field
-          .replace(/([A-Z])/g, '_$1')
-          .toLowerCase();
-        return !patientData[snakeCaseField] && !patientData[field];
-      });
+      const missingFields = requiredFields.filter(field => !mappedData[field as keyof typeof mappedData]);
       
       if (missingFields.length > 0) {
         toast({
@@ -520,8 +538,7 @@ Date: ___________________
       }
 
       // Enhanced date validation
-      const dob = patientData.date_of_birth || patientData.dateOfBirth;
-      const dobDate = new Date(dob);
+      const dobDate = new Date(mappedData.dateOfBirth);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
@@ -565,50 +582,10 @@ Date: ___________________
         return;
       }
 
-      // Create FormData to handle file uploads
-      const formData = new FormData();
+      console.log('🚀 Submitting patient data to backend:', mappedData);
       
-      // Add patient data with CORRECT camelCase field names for backend
-      // Map from snake_case (from PatientForm) to camelCase (backend expects)
-      formData.append('firstName', patientData.first_name || patientData.firstName || '');
-      formData.append('lastName', patientData.last_name || patientData.lastName || '');
-      formData.append('dateOfBirth', patientData.date_of_birth || patientData.dateOfBirth || '');
-      formData.append('gender', patientData.gender || '');
-      formData.append('phone', patientData.phone || '');
-      formData.append('email', patientData.email || '');
-      formData.append('address', patientData.address || '');
-      formData.append('emergencyContactName', patientData.emergency_contact_name || patientData.emergencyContactName || '');
-      formData.append('emergencyContactPhone', patientData.emergency_contact_phone || patientData.emergencyContactPhone || '');
-      formData.append('medicalHistory', patientData.medical_history || patientData.medicalHistory || '');
-      formData.append('allergies', patientData.allergies || '');
-      formData.append('currentMedications', patientData.current_medications || patientData.currentMedications || '');
-      
-      // Add patient consent information
-      formData.append('consentAccepted', (patientData.consentAccepted || false).toString());
-      formData.append('consentFormPath', patientData.consentFile?.name || '');
-      
-      // Add research consent information
-      formData.append('researchConsent', researchConsent.dataUse.toString());
-      formData.append('anonymizedDataConsent', researchConsent.anonymizedData.toString());
-      formData.append('futureContactConsent', researchConsent.futureContact.toString());
-      
-      if (researchConsent.consentDate) {
-        formData.append('researchConsentDate', researchConsent.consentDate.toISOString());
-      }
-      
-      // Add research consent file if exists
-      if (researchConsentFile) {
-        formData.append('researchConsentFile', researchConsentFile);
-      }
-
-      console.log('🚀 Submitting form data with files');
-      console.log('FormData contents:');
-      for (let [key, value] of (formData as any).entries()) {
-        console.log(`${key}:`, value);
-      }
-      
-      // You'll need to update your addPatient function to handle FormData
-      await addPatient(formData);
+      // Call addPatient with the mapped JSON data (not FormData)
+      await addPatient(mappedData);
       
       // Reset forms only on success
       setResearchConsent({
@@ -622,7 +599,7 @@ Date: ___________________
 
       toast({
         title: "Patient registered successfully",
-        description: "Patient information and signed consent forms have been stored.",
+        description: "Patient information has been stored successfully.",
         variant: "default"
       });
 
