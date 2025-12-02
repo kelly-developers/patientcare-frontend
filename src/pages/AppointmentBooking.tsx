@@ -8,54 +8,55 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, User, Stethoscope, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { appointmentsService, Appointment, CreateAppointmentRequest } from "@/services/appointmentsService";
+import { 
+  appointmentsService, 
+  Appointment, 
+  CreateAppointmentRequest,
+  Doctor 
+} from "@/services/appointmentsService";
 import { usePatients } from "@/hooks/usePatients";
-
-interface Doctor {
-  id: string;
-  name: string;
-  specialty: string;
-  available: boolean;
-}
-
-const doctors: Doctor[] = [
-  { id: "1", name: "Dr. Sarah Johnson", specialty: "Cardiologist", available: true },
-  { id: "2", name: "Dr. Michael Chen", specialty: "Cardiac Surgeon", available: true },
-  { id: "3", name: "Dr. Emily Davis", specialty: "Interventional Cardiologist", available: true },
-  { id: "4", name: "Dr. James Wilson", specialty: "Cardiothoracic Surgeon", available: false },
-];
 
 export default function AppointmentBooking() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { patients, loading: patientsLoading } = usePatients();
   const [loading, setLoading] = useState(false);
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    patientId: string;
+    doctorId: string;
+    date: string;
+    time: string;
+    type: string;
+    priority: string;
+    reason: string;
+    notes: string;
+  }>({
     patientId: "",
     doctorId: "",
     date: "",
     time: "",
     type: "",
-    priority: "medium",
+    priority: "MEDIUM",
     reason: "",
     notes: ""
   });
   const { toast } = useToast();
 
   useEffect(() => {
-    loadAppointments();
+    loadData();
   }, []);
 
-  const loadAppointments = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await appointmentsService.getAll();
-      setAppointments(data);
+      await Promise.all([loadAppointments(), loadDoctors()]);
     } catch (error) {
-      console.error('Error loading appointments:', error);
+      console.error('Error loading data:', error);
       toast({
         title: "Error",
-        description: "Failed to load appointments",
+        description: "Failed to load data",
         variant: "destructive",
       });
     } finally {
@@ -63,16 +64,46 @@ export default function AppointmentBooking() {
     }
   };
 
+  const loadAppointments = async () => {
+    try {
+      const data = await appointmentsService.getAll();
+      setAppointments(data);
+    } catch (error) {
+      console.error('Error loading appointments:', error);
+      throw error;
+    }
+  };
+
+  const loadDoctors = async () => {
+    try {
+      setDoctorsLoading(true);
+      const data = await appointmentsService.getDoctors();
+      setDoctors(data);
+    } catch (error) {
+      console.error('Error loading doctors:', error);
+      throw error;
+    } finally {
+      setDoctorsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const selectedPatient = patients.find(p => p.id === formData.patientId);
-    const selectedDoctor = formData.doctorId ? doctors.find(d => d.id === formData.doctorId) : null;
-    
-    if (!selectedPatient) {
+    // Validate required fields
+    if (!formData.patientId) {
       toast({
         title: "Error",
         description: "Please select a patient",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.doctorId) {
+      toast({
+        title: "Error",
+        description: "Please select a doctor",
         variant: "destructive",
       });
       return;
@@ -87,17 +118,37 @@ export default function AppointmentBooking() {
       return;
     }
 
+    if (!formData.type) {
+      toast({
+        title: "Error",
+        description: "Please select appointment type",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.reason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter reason for appointment",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
+      // Convert string IDs to numbers
       const appointmentData: CreateAppointmentRequest = {
-        patient_id: formData.patientId,
-        doctor_id: formData.doctorId || 'unassigned',
-        appointment_date: formData.date,
-        appointment_time: formData.time,
-        type: formData.type,
-        status: 'scheduled',
-        notes: `${formData.reason}\n\n${formData.notes}`.trim()
+        patientId: parseInt(formData.patientId),
+        doctorId: parseInt(formData.doctorId),
+        appointmentDate: formData.date,
+        appointmentTime: formData.time,
+        type: formData.type as 'CONSULTATION' | 'FOLLOW_UP' | 'EMERGENCY' | 'SURGERY',
+        reason: formData.reason,
+        notes: formData.notes.trim(),
+        priority: formData.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
       };
 
       const newAppointment = await appointmentsService.create(appointmentData);
@@ -110,7 +161,7 @@ export default function AppointmentBooking() {
         date: "",
         time: "",
         type: "",
-        priority: "medium",
+        priority: "MEDIUM",
         reason: "",
         notes: ""
       });
@@ -119,11 +170,12 @@ export default function AppointmentBooking() {
         title: "Success",
         description: "Appointment scheduled successfully",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating appointment:', error);
+      const errorMessage = error.response?.data?.message || "Failed to schedule appointment";
       toast({
         title: "Error",
-        description: "Failed to schedule appointment",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -131,9 +183,9 @@ export default function AppointmentBooking() {
     }
   };
 
-  const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
+  const updateAppointmentStatus = async (appointmentId: number, newStatus: string) => {
     try {
-      const updated = await appointmentsService.update(appointmentId, { status: newStatus });
+      const updated = await appointmentsService.updateStatus(appointmentId, newStatus);
       setAppointments(prev => prev.map(app => app.id === appointmentId ? updated : app));
 
       toast({
@@ -152,10 +204,10 @@ export default function AppointmentBooking() {
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'bg-blue-500 text-white';
-      case 'confirmed': return 'bg-green-500 text-white';
-      case 'completed': return 'bg-gray-500 text-white';
-      case 'cancelled': return 'bg-red-500 text-white';
+      case 'SCHEDULED': return 'bg-blue-500 text-white';
+      case 'CONFIRMED': return 'bg-green-500 text-white';
+      case 'COMPLETED': return 'bg-gray-500 text-white';
+      case 'CANCELLED': return 'bg-red-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
   };
@@ -168,9 +220,37 @@ export default function AppointmentBooking() {
     });
   };
 
-  const getPatientName = (patientId: string) => {
-    const patient = patients.find(p => p.id === patientId);
-    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
+  const formatTime = (timeString: string) => {
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const formattedHour = hour % 12 || 12;
+    return `${formattedHour}:${minutes} ${ampm}`;
+  };
+
+  const getDoctorName = (doctorId: number) => {
+    const doctor = doctors.find(d => d.id === doctorId);
+    return doctor ? `${doctor.firstName} ${doctor.lastName}` : 'Unknown Doctor';
+  };
+
+  const getAppointmentTypeLabel = (type: string) => {
+    switch (type) {
+      case 'CONSULTATION': return 'Consultation';
+      case 'FOLLOW_UP': return 'Follow-up';
+      case 'EMERGENCY': return 'Emergency';
+      case 'SURGERY': return 'Surgery';
+      default: return type;
+    }
+  };
+
+  const getPriorityLabel = (priority: string) => {
+    switch (priority) {
+      case 'LOW': return 'Low';
+      case 'MEDIUM': return 'Medium';
+      case 'HIGH': return 'High';
+      case 'URGENT': return 'Urgent';
+      default: return priority;
+    }
   };
 
   return (
@@ -197,18 +277,19 @@ export default function AppointmentBooking() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="patient">Select Patient</Label>
+                <Label htmlFor="patient">Select Patient *</Label>
                 <Select 
                   value={formData.patientId} 
                   onValueChange={(value) => setFormData({...formData, patientId: value})}
                   disabled={patientsLoading}
+                  required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={patientsLoading ? "Loading patients..." : "Choose patient..."} />
+                    <SelectValue placeholder={patientsLoading ? "Loading patients..." : "Select patient..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((patient) => (
-                      <SelectItem key={patient.id} value={patient.id}>
+                      <SelectItem key={patient.id} value={patient.id.toString()}>
                         {patient.firstName} {patient.lastName} - {patient.patientId}
                       </SelectItem>
                     ))}
@@ -217,27 +298,32 @@ export default function AppointmentBooking() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="doctor">Select Doctor (Optional)</Label>
+                <Label htmlFor="doctor">Select Doctor *</Label>
                 <Select 
                   value={formData.doctorId} 
                   onValueChange={(value) => setFormData({...formData, doctorId: value})}
+                  disabled={doctorsLoading}
+                  required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose doctor (optional)..." />
+                    <SelectValue placeholder={doctorsLoading ? "Loading doctors..." : "Select doctor..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {doctors.filter(d => d.available).map((doctor) => (
-                      <SelectItem key={doctor.id} value={doctor.id}>
-                        {doctor.name} - {doctor.specialty}
-                      </SelectItem>
-                    ))}
+                    {doctors
+                      .filter(doctor => doctor.available)
+                      .map((doctor) => (
+                        <SelectItem key={doctor.id} value={doctor.id.toString()}>
+                          Dr. {doctor.firstName} {doctor.lastName} {doctor.specialty ? `- ${doctor.specialty}` : ''}
+                        </SelectItem>
+                      ))
+                    }
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
+                  <Label htmlFor="date">Date *</Label>
                   <Input
                     id="date"
                     type="date"
@@ -248,7 +334,7 @@ export default function AppointmentBooking() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="time">Time</Label>
+                  <Label htmlFor="time">Time *</Label>
                   <Input
                     id="time"
                     type="time"
@@ -260,30 +346,51 @@ export default function AppointmentBooking() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type">Appointment Type</Label>
+                <Label htmlFor="type">Appointment Type *</Label>
                 <Select 
                   value={formData.type} 
                   onValueChange={(value) => setFormData({...formData, type: value})}
+                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="consultation">Consultation</SelectItem>
-                    <SelectItem value="follow-up">Follow-up</SelectItem>
-                    <SelectItem value="emergency">Emergency</SelectItem>
-                    <SelectItem value="surgery">Surgery</SelectItem>
+                    <SelectItem value="CONSULTATION">Consultation</SelectItem>
+                    <SelectItem value="FOLLOW_UP">Follow-up</SelectItem>
+                    <SelectItem value="EMERGENCY">Emergency</SelectItem>
+                    <SelectItem value="SURGERY">Surgery</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reason">Reason for Visit</Label>
+                <Label htmlFor="priority">Priority</Label>
+                <Select 
+                  value={formData.priority} 
+                  onValueChange={(value) => setFormData({...formData, priority: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Low</SelectItem>
+                    <SelectItem value="MEDIUM">Medium</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="URGENT">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason for Visit *</Label>
                 <Textarea
                   id="reason"
                   placeholder="Brief description of the reason for appointment..."
                   value={formData.reason}
                   onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                  required
+                  rows={3}
                 />
               </div>
 
@@ -294,13 +401,14 @@ export default function AppointmentBooking() {
                   placeholder="Any additional information..."
                   value={formData.notes}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  rows={2}
                 />
               </div>
 
               <Button 
                 type="submit" 
                 className="w-full bg-gradient-medical text-white"
-                disabled={submitting || patientsLoading}
+                disabled={submitting || patientsLoading || doctorsLoading}
               >
                 {submitting ? (
                   <>
@@ -341,32 +449,52 @@ export default function AppointmentBooking() {
                 appointments.map((appointment) => (
                   <div key={appointment.id} className="p-4 bg-background rounded-lg border">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="font-medium">{getPatientName(appointment.patient_id)}</div>
+                      <div className="font-medium">
+                        {appointment.patient.firstName} {appointment.patient.lastName}
+                      </div>
                       <Badge className={getStatusBadgeColor(appointment.status)}>
                         {appointment.status}
                       </Badge>
                     </div>
+                    
                     <div className="text-sm text-muted-foreground space-y-1">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3 h-3" />
-                        {formatDate(appointment.appointment_date)} at {appointment.appointment_time}
+                        {formatDate(appointment.appointmentDate)} at {formatTime(appointment.appointmentTime)}
                       </div>
                       <div className="flex items-center gap-2">
                         <Stethoscope className="w-3 h-3" />
-                        {appointment.type}
+                        {getAppointmentTypeLabel(appointment.type)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {appointment.doctor ? 
+                          `Dr. ${appointment.doctor.firstName} ${appointment.doctor.lastName}` : 
+                          'Doctor not assigned'
+                        }
+                      </div>
+                      {appointment.priority && (
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-3 h-3" />
+                          Priority: {getPriorityLabel(appointment.priority)}
+                        </div>
+                      )}
+                      <div className="mt-2 text-xs">
+                        <span className="font-medium">Reason:</span> {appointment.reason}
                       </div>
                       {appointment.notes && (
-                        <div className="mt-2 text-xs">
+                        <div className="text-xs">
                           <span className="font-medium">Notes:</span> {appointment.notes}
                         </div>
                       )}
                     </div>
-                    {appointment.status === 'scheduled' && (
+                    
+                    {appointment.status === 'SCHEDULED' && (
                       <div className="flex gap-2 mt-3">
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={() => updateAppointmentStatus(appointment.id, 'confirmed')}
+                          onClick={() => updateAppointmentStatus(appointment.id, 'CONFIRMED')}
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
                           Confirm
@@ -374,7 +502,7 @@ export default function AppointmentBooking() {
                         <Button 
                           size="sm" 
                           variant="destructive"
-                          onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                          onClick={() => updateAppointmentStatus(appointment.id, 'CANCELLED')}
                         >
                           Cancel
                         </Button>
