@@ -12,9 +12,13 @@ import {
   User, 
   CheckCircle,
   Loader2,
-  Scissors, // ✅ Changed from Scalpel to Scissors
+  Scissors,
   TestTube,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Heart,
+  Thermometer,
+  Activity
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -69,6 +73,7 @@ export default function DoctorAnalysis() {
     try {
       setLoading(true);
       const data = await analysisService.getAll();
+      console.log('Loaded analyses:', data);
       setAnalyses(data);
     } catch (error: any) {
       console.error('Error loading analyses:', error);
@@ -88,6 +93,7 @@ export default function DoctorAnalysis() {
   const loadPatientVitals = async (patientId: string) => {
     try {
       const vitals = await vitalDataService.getByPatient(parseInt(patientId));
+      console.log('Loaded patient vitals:', vitals);
       if (vitals && vitals.length > 0) {
         setLatestVitals(vitals[vitals.length - 1]);
       } else {
@@ -142,6 +148,24 @@ export default function DoctorAnalysis() {
       return;
     }
 
+    if (analysisData.recommendSurgery && (!analysisData.surgeryType || !analysisData.surgeryUrgency)) {
+      toast({
+        title: "Error",
+        description: "Please select surgery type and urgency if recommending surgery",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (analysisData.requireLabTests && !analysisData.labTestsNeeded.trim()) {
+      toast({
+        title: "Error",
+        description: "Please specify required lab tests",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -164,6 +188,8 @@ export default function DoctorAnalysis() {
       console.log('Sending analysis data:', requestData);
       
       const newAnalysis = await analysisService.create(requestData);
+      console.log('Created analysis:', newAnalysis);
+      
       setAnalyses(prev => [newAnalysis, ...prev]);
 
       toast({
@@ -193,6 +219,8 @@ export default function DoctorAnalysis() {
           errorMessage = error.response.data.message;
         } else if (error.response.data.error) {
           errorMessage = error.response.data.error;
+        } else if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
         }
       } else if (error.message) {
         errorMessage = error.message;
@@ -215,6 +243,11 @@ export default function DoctorAnalysis() {
     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown Patient';
   };
 
+  const getDoctorName = (doctor: any) => {
+    if (!doctor) return 'Unknown Doctor';
+    return `Dr. ${doctor.firstName} ${doctor.lastName}`;
+  };
+
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -231,10 +264,10 @@ export default function DoctorAnalysis() {
 
   const getSurgeryUrgencyLabel = (urgency: string) => {
     switch (urgency) {
-      case 'EMERGENCY': return 'Emergency';
-      case 'URGENT': return 'Urgent';
-      case 'ROUTINE': return 'Routine';
-      case 'ELECTIVE': return 'Elective';
+      case 'EMERGENCY': return 'Emergency (0-6 hours)';
+      case 'URGENT': return 'Urgent (24-48 hours)';
+      case 'ROUTINE': return 'Routine (1-2 weeks)';
+      case 'ELECTIVE': return 'Elective (1+ months)';
       default: return urgency;
     }
   };
@@ -300,51 +333,82 @@ export default function DoctorAnalysis() {
                 <div className="space-y-3 pt-4 border-t">
                   <h3 className="font-semibold text-sm">Patient Information</h3>
                   <div className="space-y-2 text-sm">
-                    <div>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Name:</span>{" "}
+                      <span className="font-medium">{selectedPatient.firstName} {selectedPatient.lastName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Age:</span>{" "}
                       <span className="font-medium">{getPatientAge(selectedPatient.dateOfBirth)} years</span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Gender:</span>{" "}
                       <span className="font-medium capitalize">{selectedPatient.gender || 'N/A'}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Medical History:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.medicalHistory || 'None recorded', 150)}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Heart className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Medical History:</span>
+                      </div>
+                      <p className="text-foreground mt-1 text-xs bg-muted/50 p-2 rounded">
+                        {truncateText(selectedPatient.medicalHistory || 'None recorded', 150)}
+                      </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Allergies:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.allergies || 'None recorded', 100)}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Allergies:</span>
+                      </div>
+                      <p className="text-foreground mt-1 text-xs bg-muted/50 p-2 rounded">
+                        {truncateText(selectedPatient.allergies || 'None recorded', 100)}
+                      </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Current Medications:</span>{" "}
-                      <p className="text-foreground mt-1 text-xs">{truncateText(selectedPatient.currentMedications || 'None recorded', 100)}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <TestTube className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Current Medications:</span>
+                      </div>
+                      <p className="text-foreground mt-1 text-xs bg-muted/50 p-2 rounded">
+                        {truncateText(selectedPatient.currentMedications || 'None recorded', 100)}
+                      </p>
                     </div>
                     {latestVitals && (
                       <div className="pt-2 border-t">
-                        <span className="text-muted-foreground">Latest Vitals:</span>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Activity className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">Latest Vitals:</span>
+                        </div>
                         <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-blue-50 p-2 rounded">
+                            <Heart className="w-3 h-3 text-blue-600" />
                             <span className="font-medium">BP:</span> 
                             <span>{latestVitals.systolicBp || '--'}/{latestVitals.diastolicBp || '--'} mmHg</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-green-50 p-2 rounded">
+                            <Activity className="w-3 h-3 text-green-600" />
                             <span className="font-medium">HR:</span> 
                             <span>{latestVitals.heartRate || '--'} BPM</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-orange-50 p-2 rounded">
+                            <Thermometer className="w-3 h-3 text-orange-600" />
                             <span className="font-medium">Temp:</span> 
                             <span>{latestVitals.temperature || '--'}°C</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-purple-50 p-2 rounded">
+                            <Activity className="w-3 h-3 text-purple-600" />
                             <span className="font-medium">O2:</span> 
                             <span>{latestVitals.oxygenSaturation || '--'}%</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-cyan-50 p-2 rounded">
+                            <Activity className="w-3 h-3 text-cyan-600" />
                             <span className="font-medium">RR:</span> 
                             <span>{latestVitals.respiratoryRate || '--'} bpm</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-pink-50 p-2 rounded">
+                            <TestTube className="w-3 h-3 text-pink-600" />
                             <span className="font-medium">Glucose:</span> 
                             <span>{latestVitals.bloodGlucose || '--'} mg/dL</span>
                           </div>
@@ -425,7 +489,7 @@ export default function DoctorAnalysis() {
 
               {analysisData.requireLabTests && (
                 <div className="space-y-2 pl-6">
-                  <Label htmlFor="labTestsNeeded">Lab Tests Needed</Label>
+                  <Label htmlFor="labTestsNeeded">Lab Tests Needed *</Label>
                   <Textarea 
                     id="labTestsNeeded"
                     placeholder="Specify required lab tests: CBC, ECG, Echocardiogram, Cardiac enzymes..."
@@ -433,6 +497,7 @@ export default function DoctorAnalysis() {
                     onChange={(e) => setAnalysisData(prev => ({ ...prev, labTestsNeeded: e.target.value }))}
                     rows={2}
                     className="resize-none"
+                    required={analysisData.requireLabTests}
                   />
                 </div>
               )}
@@ -451,7 +516,7 @@ export default function DoctorAnalysis() {
                   }
                 />
                 <Label htmlFor="recommendSurgery" className="cursor-pointer flex items-center gap-2">
-                  <Scissors className="w-4 h-4" /> {/* ✅ Changed from Scalpel to Scissors */}
+                  <Scissors className="w-4 h-4" />
                   Recommend Surgery
                 </Label>
               </div>
@@ -482,10 +547,11 @@ export default function DoctorAnalysis() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="surgeryUrgency">Surgery Urgency</Label>
+                    <Label htmlFor="surgeryUrgency">Surgery Urgency *</Label>
                     <Select 
                       value={analysisData.surgeryUrgency} 
                       onValueChange={(value) => setAnalysisData(prev => ({ ...prev, surgeryUrgency: value }))}
+                      required={analysisData.recommendSurgery}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select urgency level" />
@@ -547,9 +613,11 @@ export default function DoctorAnalysis() {
                 <div key={analysis.id} className="p-4 border rounded-lg bg-background">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <div className="font-medium">{getPatientName(analysis.patient.id)}</div>
+                      <div className="font-medium">
+                        {analysis.patient ? `${analysis.patient.firstName} ${analysis.patient.lastName}` : 'Unknown Patient'}
+                      </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <span>Dr. {analysis.doctor.firstName} {analysis.doctor.lastName}</span>
+                        <span>{getDoctorName(analysis.doctor)}</span>
                         <span>•</span>
                         <span>{formatDate(analysis.createdAt)}</span>
                       </div>
@@ -567,7 +635,7 @@ export default function DoctorAnalysis() {
                     
                     <div>
                       <span className="font-medium">Diagnosis:</span>{" "}
-                      <span className="text-foreground">{analysis.diagnosis}</span>
+                      <span className="text-foreground font-semibold">{analysis.diagnosis}</span>
                     </div>
                     
                     {analysis.clinicalNotes && (
@@ -580,13 +648,13 @@ export default function DoctorAnalysis() {
                     {analysis.recommendSurgery && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="font-medium text-red-800 flex items-center gap-2">
-                          <Scissors className="w-4 h-4" /> {/* ✅ Changed from Scalpel to Scissors */}
+                          <Scissors className="w-4 h-4" />
                           Surgery Recommended
                         </div>
-                        <div className="text-sm text-red-700 mt-1">
-                          <div>Type: {analysis.surgeryType}</div>
+                        <div className="text-sm text-red-700 mt-1 space-y-1">
+                          {analysis.surgeryType && <div>Type: <span className="font-semibold">{analysis.surgeryType}</span></div>}
                           {analysis.surgeryUrgency && (
-                            <div>Urgency: {getSurgeryUrgencyLabel(analysis.surgeryUrgency)}</div>
+                            <div>Urgency: <span className="font-semibold">{getSurgeryUrgencyLabel(analysis.surgeryUrgency)}</span></div>
                           )}
                         </div>
                       </div>
