@@ -43,19 +43,13 @@ interface DoctorAnalysis {
   surgeryUrgency: string;
   status: string;
   createdAt: string;
-}
-
-interface Surgery {
-  id: number;
-  patientId: number;
-  patientName: string;
-  patientPatientId: string;
-  procedureName: string;
-  diagnosis: string;
-  urgency: string;
-  status: string;
-  scheduledDate: string;
-  recommendedBy: string;
+  surgery?: {
+    id: number;
+    status: string;
+    scheduledDate?: string;
+    procedureName: string;
+    urgency: string;
+  };
 }
 
 interface Doctor {
@@ -68,9 +62,7 @@ interface Doctor {
 
 export default function SurgicalDecisionCollaboration() {
   const [analyses, setAnalyses] = useState<DoctorAnalysis[]>([]);
-  const [surgeries, setSurgeries] = useState<Surgery[]>([]);
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>("");
-  const [selectedSurgeryId, setSelectedSurgeryId] = useState<string>("");
   const [availableDoctors, setAvailableDoctors] = useState<Doctor[]>([]);
   const [currentDoctorIndex, setCurrentDoctorIndex] = useState(0);
   const [currentReview, setCurrentReview] = useState({
@@ -85,7 +77,7 @@ export default function SurgicalDecisionCollaboration() {
   const [consensusData, setConsensusData] = useState<any>(null);
   const [patientDetails, setPatientDetails] = useState<any>(null);
   const [analysisDetails, setAnalysisDetails] = useState<DoctorAnalysis | null>(null);
-  const [activeTab, setActiveTab] = useState("surgeries");
+  const [activeTab, setActiveTab] = useState("pending");
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -108,52 +100,33 @@ export default function SurgicalDecisionCollaboration() {
     "Cost-effectiveness"
   ];
 
+  // Filter analyses based on tab
+  const pendingAnalyses = analyses.filter(a => !a.surgery || a.surgery.status === "PENDING_CONSENT");
+  const completedAnalyses = analyses.filter(a => a.surgery && ["SCHEDULED", "CANCELLED", "COMPLETED"].includes(a.surgery.status));
+
   useEffect(() => {
     loadAnalysesRequiringSurgery();
-    loadSurgeriesPendingConsent();
     loadAvailableDoctors();
   }, []);
 
   useEffect(() => {
     if (selectedAnalysisId) {
       loadAnalysisDetails();
-    }
-  }, [selectedAnalysisId]);
-
-  useEffect(() => {
-    if (selectedSurgeryId) {
-      loadSurgeryDetails();
       loadDecisionConsensus();
     }
-  }, [selectedSurgeryId]);
+  }, [selectedAnalysisId]);
 
   const loadAnalysesRequiringSurgery = async () => {
     try {
       setLoading(true);
       const response = await apiClient.get('/api/analysis/surgery-recommended');
-      setAnalyses(response.data || []);
+      const analysesWithSurgery = response.data || [];
+      setAnalyses(analysesWithSurgery);
     } catch (error) {
       console.error('Error loading analyses requiring surgery:', error);
       toast({
         title: "Error",
         description: "Failed to load analyses requiring surgery",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSurgeriesPendingConsent = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get('/api/surgeries/pending-consent');
-      setSurgeries(response.data || []);
-    } catch (error) {
-      console.error('Error loading surgeries pending consent:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load surgeries pending consent",
         variant: "destructive",
       });
     } finally {
@@ -197,22 +170,6 @@ export default function SurgicalDecisionCollaboration() {
     }
   };
 
-  const loadSurgeryDetails = async () => {
-    if (!selectedSurgeryId) return;
-    
-    try {
-      const response = await apiClient.get(`/api/surgeries/${selectedSurgeryId}`);
-      const surgery = response.data;
-      
-      // Load patient details for surgery
-      if (surgery.patientId) {
-        await loadPatientDetails(surgery.patientId);
-      }
-    } catch (error) {
-      console.error('Error loading surgery details:', error);
-    }
-  };
-
   const loadPatientDetails = async (patientId: string) => {
     try {
       const response = await apiClient.get(`/api/patients/${patientId}`);
@@ -223,72 +180,36 @@ export default function SurgicalDecisionCollaboration() {
   };
 
   const loadDecisionConsensus = async () => {
-    if (!selectedSurgeryId) return;
+    if (!selectedAnalysisId) return;
     
     try {
-      const response = await apiClient.get(`/api/surgical-decisions/consensus/${selectedSurgeryId}`);
-      setConsensusData(response.data);
+      const response = await apiClient.get(`/api/surgical-decisions/consensus/analysis/${selectedAnalysisId}`);
+      const consensus = response.data;
+      setConsensusData(consensus);
       
-      if (response.data.consensusReached) {
+      if (consensus.consensusReached) {
         setDecisionMade(true);
-        setQuorumMet(response.data.accepted >= 2);
+        setQuorumMet(consensus.accepted >= 2);
+        
+        // Update local analysis status if consensus reached
+        setAnalyses(prev => prev.map(analysis => {
+          if (analysis.id.toString() === selectedAnalysisId && analysis.surgery) {
+            return {
+              ...analysis,
+              surgery: {
+                ...analysis.surgery,
+                status: consensus.accepted >= 2 ? "SCHEDULED" : "CANCELLED"
+              }
+            };
+          }
+          return analysis;
+        }));
       } else {
         setDecisionMade(false);
         setQuorumMet(false);
       }
     } catch (error) {
       console.error('Error loading consensus data:', error);
-    }
-  };
-
-  const createSurgeryFromAnalysis = async (analysisId: string) => {
-    try {
-      setLoading(true);
-      
-      // Get analysis details
-      const response = await apiClient.get(`/api/analysis/${analysisId}`);
-      const analysis = response.data;
-      
-      // Create surgery from analysis
-      const surgeryRequest = {
-        patientId: analysis.patient.id,
-        procedureName: analysis.surgeryType,
-        urgency: mapAnalysisUrgencyToSurgeryUrgency(analysis.surgeryUrgency),
-        recommendedBy: analysis.doctor.firstName + " " + analysis.doctor.lastName,
-        diagnosis: analysis.diagnosis,
-        status: "PENDING_CONSENT"
-      };
-      
-      await apiClient.post('/api/surgeries', surgeryRequest);
-      
-      toast({
-        title: "Success",
-        description: "Surgery case created from analysis",
-      });
-      
-      // Reload surgeries
-      await loadSurgeriesPendingConsent();
-      setActiveTab("surgeries");
-      
-    } catch (error) {
-      console.error('Error creating surgery from analysis:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create surgery from analysis",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const mapAnalysisUrgencyToSurgeryUrgency = (urgency: string): string => {
-    switch (urgency?.toUpperCase()) {
-      case "EMERGENT": return "EMERGENCY";
-      case "URGENT": return "URGENT";
-      case "SCHEDULED": return "SCHEDULED";
-      case "ELECTIVE": return "ELECTIVE";
-      default: return "ELECTIVE";
     }
   };
 
@@ -307,10 +228,10 @@ export default function SurgicalDecisionCollaboration() {
   };
 
   const handleSubmitSingleReview = async () => {
-    if (!selectedSurgeryId) {
+    if (!selectedAnalysisId) {
       toast({
         title: "Error",
-        description: "Please select a surgery case",
+        description: "Please select an analysis case",
         variant: "destructive",
       });
       return;
@@ -335,26 +256,21 @@ export default function SurgicalDecisionCollaboration() {
       });
 
       const decisionRequest = {
-        surgeryId: parseInt(selectedSurgeryId),
+        analysisId: parseInt(selectedAnalysisId),
         surgeonName: currentReview.surgeonName,
         decisionStatus: currentReview.decision,
         comments: currentReview.comments,
         factorsConsidered: factorsMap
       };
 
-      // Submit to backend
-      await surgicalDecisionService.submitDecision(decisionRequest);
+      // Submit to backend - this will automatically create surgery if first decision
+      await surgicalDecisionService.submitAnalysisDecision(decisionRequest);
       
       // Reload consensus data
       await loadDecisionConsensus();
 
       if (consensusData?.consensusReached) {
-        // Update surgery status based on consensus
-        const newStatus = consensusData.accepted >= 2 ? 'SCHEDULED' : 'CANCELLED';
-        await apiClient.put(`/api/surgeries/${selectedSurgeryId}/status`, null, {
-          params: { status: newStatus }
-        });
-
+        // Final decision made
         if (consensusData.accepted >= 2) {
           toast({
             title: "Final Decision - Surgery Accepted",
@@ -369,8 +285,8 @@ export default function SurgicalDecisionCollaboration() {
           });
         }
         
-        // Refresh surgeries list
-        await loadSurgeriesPendingConsent();
+        // Refresh analyses list
+        await loadAnalysesRequiringSurgery();
       } else {
         // Move to next doctor
         setCurrentDoctorIndex(prev => prev + 1);
@@ -401,8 +317,8 @@ export default function SurgicalDecisionCollaboration() {
   };
 
   const handleProceedToConsent = () => {
-    if (selectedSurgeryId) {
-      navigate(`/consent?surgeryId=${selectedSurgeryId}`);
+    if (selectedAnalysisId) {
+      navigate(`/consent?analysisId=${selectedAnalysisId}`);
     } else {
       navigate('/consent');
     }
@@ -422,11 +338,10 @@ export default function SurgicalDecisionCollaboration() {
     });
     setDecisionMade(false);
     setQuorumMet(false);
-    setSelectedSurgeryId("");
+    setSelectedAnalysisId("");
     setConsensusData(null);
   };
 
-  const selectedSurgery = surgeries.find(s => s.id.toString() === selectedSurgeryId);
   const selectedAnalysis = analyses.find(a => a.id.toString() === selectedAnalysisId);
 
   // Calculate summary statistics
@@ -439,25 +354,25 @@ export default function SurgicalDecisionCollaboration() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-foreground">Surgical Decision Collaboration</h1>
         <p className="text-muted-foreground">
-          Review surgical cases and make collaborative decisions
+          Review surgical cases and make collaborative decisions directly from doctor analyses
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="surgeries" className="flex items-center gap-2">
-            <Scalpel className="w-4 h-4" />
-            Pending Surgeries ({surgeries.length})
+          <TabsTrigger value="pending" className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Pending Decisions ({pendingAnalyses.length})
           </TabsTrigger>
-          <TabsTrigger value="analyses" className="flex items-center gap-2">
-            <Stethoscope className="w-4 h-4" />
-            Analyses Requiring Surgery ({analyses.length})
+          <TabsTrigger value="completed" className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            Completed ({completedAnalyses.length})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="surgeries" className="space-y-6">
+        <TabsContent value="pending" className="space-y-6">
           {/* Progress Indicator */}
-          {selectedSurgeryId && !decisionMade && (
+          {selectedAnalysisId && !decisionMade && (
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
@@ -528,82 +443,105 @@ export default function SurgicalDecisionCollaboration() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Surgery Selection */}
+            {/* Analysis Selection */}
             <Card className="lg:col-span-1 bg-gradient-card shadow-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-primary" />
-                  Surgical Cases Pending Review
+                  <Stethoscope className="w-5 h-5 text-primary" />
+                  Cases Pending Review
                 </CardTitle>
                 <CardDescription>
-                  Select a surgery case to review
+                  Select an analysis case to review
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="surgery">Select Surgery Case</Label>
+                    <Label htmlFor="analysis">Select Analysis Case</Label>
                     <Select 
-                      value={selectedSurgeryId} 
-                      onValueChange={setSelectedSurgeryId}
+                      value={selectedAnalysisId} 
+                      onValueChange={setSelectedAnalysisId}
                       disabled={decisionMade || totalReviews > 0 || loading}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={loading ? "Loading..." : "Choose case..."} />
                       </SelectTrigger>
                       <SelectContent>
-                        {surgeries.map((surgery) => (
-                          <SelectItem key={surgery.id} value={surgery.id.toString()}>
-                            {surgery.patientName} - {surgery.procedureName}
+                        {pendingAnalyses.map((analysis) => (
+                          <SelectItem key={analysis.id} value={analysis.id.toString()}>
+                            {analysis.patientName} - {analysis.surgeryType}
+                            {analysis.surgery && ` (${analysis.surgery.status})`}
                           </SelectItem>
                         ))}
-                        {surgeries.length === 0 && (
-                          <SelectItem value="" disabled>No surgeries pending consent</SelectItem>
+                        {pendingAnalyses.length === 0 && (
+                          <SelectItem value="" disabled>No cases pending review</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {selectedSurgery && (
+                  {selectedAnalysis && (
                     <div className="space-y-3 pt-4 border-t">
                       <h3 className="font-semibold text-sm">Case Information</h3>
                       <div className="space-y-2 text-sm">
                         <div>
                           <span className="text-muted-foreground">Patient:</span>{" "}
                           <span className="font-medium">
-                            {selectedSurgery.patientName}
+                            {selectedAnalysis.patientName}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Patient ID:</span>{" "}
-                          <span className="font-medium">{selectedSurgery.patientPatientId}</span>
+                          <span className="font-medium">{selectedAnalysis.patientPatientId}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Procedure:</span>{" "}
-                          <span className="font-medium">{selectedSurgery.procedureName}</span>
+                          <span className="text-muted-foreground">Recommended Procedure:</span>{" "}
+                          <span className="font-medium">{selectedAnalysis.surgeryType}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Diagnosis:</span>{" "}
-                          <span className="font-medium">{selectedSurgery.diagnosis}</span>
+                          <span className="font-medium">{selectedAnalysis.diagnosis}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Recommended by:</span>{" "}
-                          <span className="font-medium">{selectedSurgery.recommendedBy}</span>
+                          <span className="text-muted-foreground">Analyzed by:</span>{" "}
+                          <span className="font-medium">{selectedAnalysis.doctorName}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Urgency:</span>{" "}
                           <Badge variant="outline" className="ml-1 capitalize">
-                            {selectedSurgery.urgency?.toLowerCase() || 'N/A'}
+                            {selectedAnalysis.surgeryUrgency?.toLowerCase() || 'N/A'}
                           </Badge>
                         </div>
-                        {selectedSurgery.scheduledDate && (
+                        {selectedAnalysis.surgery?.scheduledDate && (
                           <div>
                             <span className="text-muted-foreground">Scheduled:</span>{" "}
                             <span className="font-medium">
-                              {new Date(selectedSurgery.scheduledDate).toLocaleDateString()}
+                              {new Date(selectedAnalysis.surgery.scheduledDate).toLocaleDateString()}
                             </span>
                           </div>
                         )}
+                        {selectedAnalysis.surgery && (
+                          <div>
+                            <span className="text-muted-foreground">Surgery Status:</span>{" "}
+                            <Badge 
+                              variant="outline" 
+                              className="ml-1 capitalize"
+                              style={{
+                                backgroundColor: selectedAnalysis.surgery.status === 'PENDING_CONSENT' ? '#fef3c7' :
+                                               selectedAnalysis.surgery.status === 'SCHEDULED' ? '#d1fae5' :
+                                               '#fef2f2'
+                              }}
+                            >
+                              {selectedAnalysis.surgery.status?.toLowerCase() || 'N/A'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                      <div className="pt-2">
+                        <h4 className="font-semibold text-sm mb-1">Clinical Notes:</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedAnalysis.clinicalNotes.substring(0, 150)}...
+                        </p>
                       </div>
                     </div>
                   )}
@@ -623,7 +561,7 @@ export default function SurgicalDecisionCollaboration() {
                     ? "Final decision has been made based on 3 reviews"
                     : totalReviews > 0 
                       ? `Provide your independent assessment (Review ${currentDoctorIndex + 1} of 3)`
-                      : "Be the first surgeon to review this case"
+                      : "Be the first surgeon to review this case - Surgery will be auto-created"
                   }
                 </CardDescription>
               </CardHeader>
@@ -713,11 +651,11 @@ export default function SurgicalDecisionCollaboration() {
                       <Button 
                         className="bg-gradient-medical text-white"
                         onClick={handleSubmitSingleReview}
-                        disabled={!selectedSurgeryId || decisionMade || loading}
+                        disabled={!selectedAnalysisId || decisionMade || loading}
                       >
                         {loading ? (
                           <>
-                            <span className="animate-spin mr-2">⟳</span>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Submitting...
                           </>
                         ) : (
@@ -741,15 +679,28 @@ export default function SurgicalDecisionCollaboration() {
                     <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold mb-2">Review Process Complete</h3>
                     <p className="text-muted-foreground">
-                      The surgical case has received 3 reviews and a final decision has been made.
+                      {quorumMet 
+                        ? "The surgical case has been accepted and is ready for consent process."
+                        : "The surgical case has been declined and will not proceed."
+                      }
                     </p>
-                    <Button 
-                      onClick={resetForm}
-                      className="mt-4"
-                      disabled={loading}
-                    >
-                      Review Another Case
-                    </Button>
+                    <div className="flex gap-3 justify-center mt-4">
+                      <Button 
+                        onClick={resetForm}
+                        disabled={loading}
+                      >
+                        Review Another Case
+                      </Button>
+                      {quorumMet && (
+                        <Button 
+                          onClick={handleProceedToConsent}
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={loading}
+                        >
+                          Proceed to Consent
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -757,71 +708,77 @@ export default function SurgicalDecisionCollaboration() {
           </div>
         </TabsContent>
 
-        <TabsContent value="analyses" className="space-y-6">
+        <TabsContent value="completed" className="space-y-6">
           <Card className="bg-gradient-card shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Stethoscope className="w-5 h-5 text-primary" />
-                Analyses Requiring Surgery
+                <CheckCircle className="w-5 h-5 text-primary" />
+                Completed Surgical Decisions
               </CardTitle>
               <CardDescription>
-                Doctor analyses that recommend surgery - Create surgical cases from these
+                Cases that have completed the review process
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {analyses.length === 0 ? (
+                {completedAnalyses.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-muted-foreground">No analyses requiring surgery found.</p>
+                    <p className="text-muted-foreground">No completed surgical decisions found.</p>
                   </div>
                 ) : (
-                  analyses.map((analysis) => (
+                  completedAnalyses.map((analysis) => (
                     <Card key={analysis.id} className="border">
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start">
                           <div className="space-y-2">
-                            <h3 className="font-semibold">
-                              {analysis.patientName} (ID: {analysis.patientPatientId})
-                            </h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">
+                                {analysis.patientName} (ID: {analysis.patientPatientId})
+                              </h3>
+                              {analysis.surgery && (
+                                <Badge 
+                                  className="ml-2"
+                                  variant={analysis.surgery.status === "SCHEDULED" ? "default" : "destructive"}
+                                >
+                                  {analysis.surgery.status}
+                                </Badge>
+                              )}
+                            </div>
                             <div className="text-sm text-muted-foreground">
+                              <p><strong>Procedure:</strong> {analysis.surgeryType}</p>
                               <p><strong>Diagnosis:</strong> {analysis.diagnosis}</p>
-                              <p><strong>Recommended Surgery:</strong> {analysis.surgeryType}</p>
-                              <p><strong>Urgency:</strong> {analysis.surgeryUrgency}</p>
                               <p><strong>Analyzed by:</strong> {analysis.doctorName}</p>
                               <p><strong>Date:</strong> {new Date(analysis.createdAt).toLocaleDateString()}</p>
+                              {analysis.surgery?.scheduledDate && (
+                                <p>
+                                  <strong>Scheduled Date:</strong>{" "}
+                                  {new Date(analysis.surgery.scheduledDate).toLocaleDateString()}
+                                </p>
+                              )}
                             </div>
                             <div className="text-sm">
-                              <p><strong>Symptoms:</strong> {analysis.symptoms.substring(0, 100)}...</p>
+                              <p><strong>Clinical Notes:</strong> {analysis.clinicalNotes.substring(0, 100)}...</p>
                             </div>
                           </div>
                           <div className="flex flex-col gap-2">
                             <Button
                               size="sm"
-                              onClick={() => createSurgeryFromAnalysis(analysis.id.toString())}
-                              disabled={loading}
-                            >
-                              {loading ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Creating...
-                                </>
-                              ) : (
-                                <>
-                                  <Scalpel className="w-4 h-4 mr-2" />
-                                  Create Surgery Case
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
                               variant="outline"
                               onClick={() => {
                                 setSelectedAnalysisId(analysis.id.toString());
-                                setActiveTab("surgeries");
+                                setActiveTab("pending");
                               }}
                             >
                               View Details
                             </Button>
+                            {analysis.surgery?.status === "SCHEDULED" && (
+                              <Button
+                                size="sm"
+                                onClick={() => navigate(`/consent?analysisId=${analysis.id}`)}
+                              >
+                                Consent Process
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
