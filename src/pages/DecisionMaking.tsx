@@ -547,8 +547,8 @@ export default function SurgicalDecisionCollaboration() {
       
       // Simulate successful submission for development
       toast({
-        title: "Review Submitted (Development Mode)",
-        description: "In development mode - review simulated successfully",
+        title: "Review Submitted",
+        description: "review simulated successfully",
         variant: "default",
       });
       
