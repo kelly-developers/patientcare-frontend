@@ -3,7 +3,7 @@ import { API_ENDPOINTS } from '@/config/api';
 
 export interface SurgicalDecision {
   id: number;
-  surgery: {
+  analysis: {
     id: number;
     patient: {
       id: number;
@@ -13,10 +13,17 @@ export interface SurgicalDecision {
       dateOfBirth: string;
       gender: string;
     };
-    procedureName: string;
-    urgency: string;
+    doctor: {
+      id: number;
+      firstName: string;
+      lastName: string;
+    };
+    symptoms: string;
     diagnosis: string;
-    status: string;
+    surgeryType: string;
+    surgeryUrgency: string;
+    clinicalNotes: string;
+    createdAt: string;
   };
   surgeonName: string;
   decisionStatus: 'ACCEPTED' | 'DECLINED';
@@ -26,7 +33,7 @@ export interface SurgicalDecision {
 }
 
 export interface SurgicalDecisionRequest {
-  surgeryId: number;
+  analysisId: number;
   surgeonName: string;
   decisionStatus: 'ACCEPTED' | 'DECLINED';
   comments: string;
@@ -42,51 +49,51 @@ export interface DecisionConsensus {
 }
 
 export const surgicalDecisionService = {
-  async submitDecision(decisionRequest: SurgicalDecisionRequest): Promise<SurgicalDecision> {
+  async submitAnalysisDecision(decisionRequest: SurgicalDecisionRequest): Promise<SurgicalDecision> {
     try {
       const response = await apiClient.post<SurgicalDecision>(
-        API_ENDPOINTS.SURGICAL_DECISIONS.BASE,
+        API_ENDPOINTS.SURGICAL_DECISIONS.SUBMIT_ANALYSIS_DECISION,
         decisionRequest
       );
       return response.data;
     } catch (error) {
-      console.error('Error submitting surgical decision:', error);
+      console.error('Error submitting surgical decision for analysis:', error);
       throw error;
     }
   },
 
-  async getDecisionsBySurgery(surgeryId: number): Promise<SurgicalDecision[]> {
+  async getDecisionsByAnalysis(analysisId: number): Promise<SurgicalDecision[]> {
     try {
       const response = await apiClient.get<SurgicalDecision[]>(
-        API_ENDPOINTS.SURGICAL_DECISIONS.BY_SURGERY(surgeryId)
+        API_ENDPOINTS.SURGICAL_DECISIONS.BY_ANALYSIS(analysisId)
       );
       return response.data || [];
     } catch (error) {
-      console.error('Error fetching decisions by surgery:', error);
+      console.error('Error fetching decisions by analysis:', error);
       throw error;
     }
   },
 
-  async getDecisionConsensus(surgeryId: number): Promise<DecisionConsensus> {
+  async getAnalysisDecisionConsensus(analysisId: number): Promise<DecisionConsensus> {
     try {
       const response = await apiClient.get<DecisionConsensus>(
-        API_ENDPOINTS.SURGICAL_DECISIONS.CONSENSUS(surgeryId)
+        API_ENDPOINTS.SURGICAL_DECISIONS.ANALYSIS_CONSENSUS(analysisId)
       );
       return response.data;
     } catch (error) {
-      console.error('Error fetching decision consensus:', error);
+      console.error('Error fetching decision consensus for analysis:', error);
       throw error;
     }
   },
 
-  async hasConsensusForSurgery(surgeryId: number): Promise<boolean> {
+  async hasConsensusForAnalysis(analysisId: number): Promise<boolean> {
     try {
       const response = await apiClient.get<boolean>(
-        API_ENDPOINTS.SURGICAL_DECISIONS.HAS_CONSENSUS(surgeryId)
+        API_ENDPOINTS.SURGICAL_DECISIONS.HAS_ANALYSIS_CONSENSUS(analysisId)
       );
       return response.data;
     } catch (error) {
-      console.error('Error checking consensus:', error);
+      console.error('Error checking analysis consensus:', error);
       return false;
     }
   },
