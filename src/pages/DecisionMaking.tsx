@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { 
-  Users, 
   FileText, 
   CheckCircle,
   XCircle,
@@ -20,21 +19,23 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Input } from "@/components/ui/input";
+import { apiClient } from "@/config/api";
 
 export default function SurgicalDecisionCollaboration() {
   const [surgeries, setSurgeries] = useState<any[]>([]);
-  const [selectedSurgeryId, setSelectedSurgeryId] = useState("");
+  const [selectedSurgeryId, setSelectedSurgeryId] = useState<string>("");
   const [surgeonReviews, setSurgeonReviews] = useState<any[]>([]);
   const [currentDoctorIndex, setCurrentDoctorIndex] = useState(0);
   const [currentReview, setCurrentReview] = useState({
     name: "",
-    decision: "",
+    decision: "" as "ACCEPTED" | "DECLINED" | "",
     comments: "",
-    factorsConsidered: [] as string[]
+    factorsConsidered: {} as Record<string, boolean>
   });
   const [decisionMade, setDecisionMade] = useState(false);
   const [quorumMet, setQuorumMet] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [consensusData, setConsensusData] = useState<any>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -64,48 +65,105 @@ export default function SurgicalDecisionCollaboration() {
 
   useEffect(() => {
     loadSurgeries();
-    loadSurgeonReviews();
   }, []);
 
-  const loadSurgeries = () => {
-    const stored = localStorage.getItem('cvms_surgeries') || localStorage.getItem('cardiovascular-surgeries');
-    if (stored) {
-      const allSurgeries = JSON.parse(stored);
-      const pendingSurgeries = allSurgeries.filter((s: any) => s.status === 'consent_pending');
-      setSurgeries(pendingSurgeries);
+  useEffect(() => {
+    if (selectedSurgeryId) {
+      loadSurgeonReviews();
+      loadConsensusData();
+    }
+  }, [selectedSurgeryId]);
+
+  const loadSurgeries = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get('/api/surgeries/pending-consent');
+      setSurgeries(response.data || []);
+    } catch (error) {
+      console.error('Error loading surgeries:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load surgery cases",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadSurgeonReviews = () => {
-    const stored = localStorage.getItem('cvms_surgeon_reviews');
-    if (stored) {
-      setSurgeonReviews(JSON.parse(stored));
+  const loadSurgeonReviews = async () => {
+    if (!selectedSurgeryId) return;
+    
+    try {
+      setLoading(true);
+      const response = await apiClient.get(`/api/surgical-decisions/surgery/${selectedSurgeryId}`);
+      setSurgeonReviews(response.data || []);
+    } catch (error) {
+      console.error('Error loading surgeon reviews:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getPatientDetails = (patientId: string) => {
-    const patients = JSON.parse(localStorage.getItem('cvms_patients') || localStorage.getItem('cardiovascular-patients') || localStorage.getItem('patients') || '[]');
-    return patients.find((p: any) => p.id === patientId);
+  const loadConsensusData = async () => {
+    if (!selectedSurgeryId) return;
+    
+    try {
+      const response = await apiClient.get(`/api/surgical-decisions/consensus/${selectedSurgeryId}`);
+      setConsensusData(response.data);
+      
+      if (response.data.consensusReached) {
+        setDecisionMade(true);
+        setQuorumMet(response.data.accepted >= 2);
+      } else {
+        setDecisionMade(false);
+        setQuorumMet(false);
+      }
+    } catch (error) {
+      console.error('Error loading consensus data:', error);
+    }
   };
 
-  const getAnalysisDetails = (patientId: string) => {
-    const analyses = JSON.parse(localStorage.getItem('cvms_analyses') || localStorage.getItem('cardiovascular-analyses') || '[]');
-    return analyses.filter((a: any) => a.patient_id === patientId).sort((a: any, b: any) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )[0];
+  const getPatientDetails = async (patientId: string) => {
+    try {
+      const response = await apiClient.get(`/api/patients/${patientId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error loading patient details:', error);
+      return null;
+    }
   };
 
-  const getVitalDataByPatient = (patientId: string) => {
-    const vitals = JSON.parse(localStorage.getItem('cvms_vital_data') || localStorage.getItem('cardiovascular-vitals') || '[]');
-    return vitals.filter((v: any) => v.patient_id === patientId || v.patientId === patientId);
+  const getAnalysisDetails = async (patientId: string) => {
+    try {
+      const response = await apiClient.get(`/api/analysis/patient/${patientId}`);
+      const analyses = response.data || [];
+      return analyses.sort((a: any, b: any) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+    } catch (error) {
+      console.error('Error loading analysis details:', error);
+      return null;
+    }
+  };
+
+  const getVitalDataByPatient = async (patientId: string) => {
+    try {
+      const response = await apiClient.get(`/api/vital-data/patient/${patientId}/latest?limit=5`);
+      return response.data || [];
+    } catch (error) {
+      console.error('Error loading vital data:', error);
+      return [];
+    }
   };
 
   const handleFactorToggle = (factor: string) => {
     setCurrentReview(prev => ({
       ...prev,
-      factorsConsidered: prev.factorsConsidered.includes(factor)
-        ? prev.factorsConsidered.filter(f => f !== factor)
-        : [...prev.factorsConsidered, factor]
+      factorsConsidered: {
+        ...prev.factorsConsidered,
+        [factor]: !prev.factorsConsidered[factor]
+      }
     }));
   };
 
@@ -113,7 +171,7 @@ export default function SurgicalDecisionCollaboration() {
     setCurrentReview(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmitSingleReview = () => {
+  const handleSubmitSingleReview = async () => {
     if (!selectedSurgeryId) {
       toast({
         title: "Error",
@@ -132,69 +190,53 @@ export default function SurgicalDecisionCollaboration() {
       return;
     }
 
-    const selectedSurgery = surgeries.find(s => s.id === selectedSurgeryId);
-
     try {
-      // Save the current review
-      const newReview = {
-        id: `${Date.now()}_${currentDoctorIndex}`,
-        surgery_id: selectedSurgeryId,
-        patient_id: selectedSurgery.patient_id,
-        patient_name: selectedSurgery.patient_name,
-        procedure_name: selectedSurgery.procedure_name,
-        surgeon_name: currentReview.name,
-        decision_status: currentReview.decision,
+      setLoading(true);
+      
+      // Prepare factors considered as a map
+      const factorsMap: Record<string, boolean> = {};
+      surgicalFactors.forEach(factor => {
+        factorsMap[factor] = currentReview.factorsConsidered[factor] || false;
+      });
+
+      const decisionRequest = {
+        surgeryId: parseInt(selectedSurgeryId),
+        surgeonName: currentReview.name,
+        decisionStatus: currentReview.decision,
         comments: currentReview.comments,
-        factors_considered: currentReview.factorsConsidered,
-        created_at: new Date().toISOString()
+        factorsConsidered: factorsMap
       };
 
-      const updatedReviews = [newReview, ...surgeonReviews];
-      setSurgeonReviews(updatedReviews);
-      localStorage.setItem('cvms_surgeon_reviews', JSON.stringify(updatedReviews));
-
-      // Check if we have 3 reviews for this surgery
-      const surgeryReviews = updatedReviews.filter(r => r.surgery_id === selectedSurgeryId);
+      // Submit to backend
+      await apiClient.post('/api/surgical-decisions', decisionRequest);
       
-      if (surgeryReviews.length >= 3) {
-        // Calculate final decision
-        const acceptances = surgeryReviews.filter(r => r.decision_status === 'accepted').length;
-        const quorumAchieved = acceptances >= 2;
-        
-        setQuorumMet(quorumAchieved);
-        setDecisionMade(true);
+      // Reload reviews and consensus data
+      await loadSurgeonReviews();
+      await loadConsensusData();
 
-        // Update surgery status
-        const allSurgeries = JSON.parse(localStorage.getItem('cvms_surgeries') || localStorage.getItem('cardiovascular-surgeries') || '[]');
-        const updatedSurgeries = allSurgeries.map((s: any) => 
-          s.id === selectedSurgeryId 
-            ? { 
-                ...s, 
-                status: quorumAchieved ? 'accepted_for_consent' : 'declined',
-                review_consensus: acceptances === 3 ? 'unanimous' : 'divided',
-                total_reviews: 3,
-                acceptance_count: acceptances,
-                last_review_date: new Date().toISOString()
-              }
-            : s
-        );
-        
-        localStorage.setItem('cvms_surgeries', JSON.stringify(updatedSurgeries));
-        setSurgeries(updatedSurgeries.filter((s: any) => s.status === 'consent_pending'));
+      if (consensusData?.consensusReached) {
+        // Update surgery status based on consensus
+        const newStatus = consensusData.accepted >= 2 ? 'APPROVED' : 'DECLINED';
+        await apiClient.put(`/api/surgeries/${selectedSurgeryId}/status`, null, {
+          params: { status: newStatus }
+        });
 
-        if (quorumAchieved) {
+        if (consensusData.accepted >= 2) {
           toast({
             title: "Final Decision - Surgery Accepted",
-            description: `Case accepted with ${acceptances}/3 votes. Quorum met.`,
+            description: `Case accepted with ${consensusData.accepted}/3 votes. Quorum met.`,
             variant: "default",
           });
         } else {
           toast({
             title: "Final Decision - Surgery Declined",
-            description: `Case declined with only ${acceptances}/3 acceptances. Quorum not met.`,
+            description: `Case declined with only ${consensusData.accepted}/3 acceptances. Quorum not met.`,
             variant: "destructive",
           });
         }
+        
+        // Refresh surgeries list
+        await loadSurgeries();
       } else {
         // Move to next doctor
         setCurrentDoctorIndex(prev => prev + 1);
@@ -202,26 +244,34 @@ export default function SurgicalDecisionCollaboration() {
           name: "",
           decision: "",
           comments: "",
-          factorsConsidered: []
+          factorsConsidered: {}
         });
         
+        const reviewsRemaining = 3 - (consensusData?.totalDecisions || 0);
         toast({
           title: "Review Submitted",
-          description: `Thank you for your review. ${3 - surgeryReviews.length} more reviews needed.`,
+          description: `Thank you for your review. ${reviewsRemaining} more review${reviewsRemaining !== 1 ? 's' : ''} needed.`,
         });
       }
 
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error submitting review:', error);
       toast({
         title: "Error",
-        description: "Failed to submit review",
+        description: error.response?.data?.message || "Failed to submit review",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleProceedToConsent = () => {
-    navigate('/consent');
+    if (selectedSurgeryId) {
+      navigate(`/consent?surgeryId=${selectedSurgeryId}`);
+    } else {
+      navigate('/consent');
+    }
   };
 
   const handleReturnToAnalysis = () => {
@@ -234,27 +284,30 @@ export default function SurgicalDecisionCollaboration() {
       name: "",
       decision: "",
       comments: "",
-      factorsConsidered: []
+      factorsConsidered: {}
     });
     setDecisionMade(false);
     setQuorumMet(false);
     setSelectedSurgeryId("");
+    setSurgeonReviews([]);
+    setConsensusData(null);
   };
 
-  const selectedSurgery = surgeries.find(s => s.id === selectedSurgeryId);
-  const patientDetails = selectedSurgery ? getPatientDetails(selectedSurgery.patient_id) : null;
-  const analysisDetails = selectedSurgery ? getAnalysisDetails(selectedSurgery.patient_id) : null;
-  const vitalData = selectedSurgery ? getVitalDataByPatient(selectedSurgery.patient_id) : [];
-  const latestVitals = vitalData[vitalData.length - 1];
-  const surgeryReviews = surgeonReviews.filter(r => r.surgery_id === selectedSurgeryId);
+  const selectedSurgery = surgeries.find(s => s.id.toString() === selectedSurgeryId);
+  const surgeryReviews = surgeonReviews.filter(r => r.surgery?.id?.toString() === selectedSurgeryId);
 
   // Calculate summary statistics
-  const totalReviews = surgeryReviews.length;
-  const acceptanceCount = surgeryReviews.filter(r => r.decision_status === 'accepted').length;
+  const totalReviews = consensusData?.totalDecisions || 0;
+  const acceptanceCount = consensusData?.accepted || 0;
   const reviewsRemaining = 3 - totalReviews;
   
   // Calculate most considered factors across all reviews
-  const allFactors = surgeryReviews.flatMap((review: any) => review.factors_considered || []);
+  const allFactors = surgeryReviews.flatMap((review: any) => 
+    Object.entries(review.factorsConsidered || {})
+      .filter(([, value]) => value === true)
+      .map(([factor]) => factor)
+  );
+  
   const factorCounts = allFactors.reduce((acc: any, factor: string) => {
     acc[factor] = (acc[factor] || 0) + 1;
     return acc;
@@ -336,6 +389,7 @@ export default function SurgicalDecisionCollaboration() {
               <Button 
                 onClick={quorumMet ? handleProceedToConsent : handleReturnToAnalysis}
                 className={quorumMet ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
+                disabled={loading}
               >
                 {quorumMet ? "Proceed to Consent" : "Return to Analysis"}
               </Button>
@@ -363,58 +417,61 @@ export default function SurgicalDecisionCollaboration() {
                 <Select 
                   value={selectedSurgeryId} 
                   onValueChange={setSelectedSurgeryId}
-                  disabled={decisionMade || totalReviews > 0}
+                  disabled={decisionMade || totalReviews > 0 || loading}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose case..." />
+                    <SelectValue placeholder={loading ? "Loading..." : "Choose case..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {surgeries.map((surgery) => (
-                      <SelectItem key={surgery.id} value={surgery.id}>
-                        {surgery.patient_name} - {surgery.procedure_name}
+                      <SelectItem key={surgery.id} value={surgery.id.toString()}>
+                        {surgery.patient?.firstName} {surgery.patient?.lastName} - {surgery.procedureName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {selectedSurgery && patientDetails && (
+              {selectedSurgery && (
                 <div className="space-y-3 pt-4 border-t">
                   <h3 className="font-semibold text-sm">Case Information</h3>
                   <div className="space-y-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">Patient:</span>{" "}
-                      <span className="font-medium">{selectedSurgery.patient_name}</span>
+                      <span className="font-medium">
+                        {selectedSurgery.patient?.firstName} {selectedSurgery.patient?.lastName}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Patient ID:</span>{" "}
+                      <span className="font-medium">{selectedSurgery.patient?.patientId}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Procedure:</span>{" "}
-                      <span className="font-medium">{selectedSurgery.procedure_name}</span>
+                      <span className="font-medium">{selectedSurgery.procedureName}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Urgency:</span>{" "}
                       <Badge variant="outline" className="ml-1 capitalize">
-                        {selectedSurgery.urgency}
+                        {selectedSurgery.urgency?.toLowerCase() || 'N/A'}
                       </Badge>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Diagnosis:</span>{" "}
-                      <span className="font-medium">{analysisDetails?.diagnosis || 'N/A'}</span>
+                      <span className="font-medium">{selectedSurgery.diagnosis || 'N/A'}</span>
                     </div>
-                    {analysisDetails?.symptoms && (
+                    <div>
+                      <span className="text-muted-foreground">Status:</span>{" "}
+                      <Badge variant="secondary" className="ml-1 capitalize">
+                        {selectedSurgery.status?.toLowerCase().replace('_', ' ') || 'N/A'}
+                      </Badge>
+                    </div>
+                    {selectedSurgery.scheduledDate && (
                       <div>
-                        <span className="text-muted-foreground">Symptoms:</span>{" "}
-                        <p className="text-foreground mt-1 text-xs">{analysisDetails.symptoms}</p>
-                      </div>
-                    )}
-                    {latestVitals && (
-                      <div className="pt-2 border-t">
-                        <span className="text-muted-foreground">Latest Vitals:</span>
-                        <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
-                          <div>BP: {latestVitals.bloodPressureSystolic}/{latestVitals.bloodPressureDiastolic}</div>
-                          <div>HR: {latestVitals.heartRate} BPM</div>
-                          <div>Temp: {latestVitals.temperature}°C</div>
-                          <div>O2: {latestVitals.oxygenSaturation}%</div>
-                        </div>
+                        <span className="text-muted-foreground">Scheduled:</span>{" "}
+                        <span className="font-medium">
+                          {new Date(selectedSurgery.scheduledDate).toLocaleDateString()}
+                        </span>
                       </div>
                     )}
                     
@@ -487,7 +544,7 @@ export default function SurgicalDecisionCollaboration() {
                     <Select 
                       value={currentReview.name} 
                       onValueChange={(value) => handleCurrentReviewChange('name', value)}
-                      disabled={decisionMade}
+                      disabled={decisionMade || loading}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select your name" />
@@ -508,17 +565,17 @@ export default function SurgicalDecisionCollaboration() {
                       value={currentReview.decision} 
                       onValueChange={(value) => handleCurrentReviewChange('decision', value)}
                       className="flex space-x-4"
-                      disabled={decisionMade}
+                      disabled={decisionMade || loading}
                     >
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="accepted" id="accepted" />
+                        <RadioGroupItem value="ACCEPTED" id="accepted" />
                         <Label htmlFor="accepted" className="flex items-center cursor-pointer text-green-600">
                           <ThumbsUp className="w-4 h-4 mr-1" />
                           Accept Case
                         </Label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="declined" id="declined" />
+                        <RadioGroupItem value="DECLINED" id="declined" />
                         <Label htmlFor="declined" className="flex items-center cursor-pointer text-red-600">
                           <ThumbsDown className="w-4 h-4 mr-1" />
                           Decline Case
@@ -536,9 +593,9 @@ export default function SurgicalDecisionCollaboration() {
                       <div key={factor} className="flex items-center space-x-2">
                         <Checkbox 
                           id={factor}
-                          checked={currentReview.factorsConsidered.includes(factor)}
+                          checked={currentReview.factorsConsidered[factor] || false}
                           onCheckedChange={() => handleFactorToggle(factor)}
-                          disabled={decisionMade}
+                          disabled={decisionMade || loading}
                         />
                         <Label htmlFor={factor} className="text-xs cursor-pointer">
                           {factor}
@@ -556,7 +613,7 @@ export default function SurgicalDecisionCollaboration() {
                     value={currentReview.comments}
                     onChange={(e) => handleCurrentReviewChange('comments', e.target.value)}
                     rows={3}
-                    disabled={decisionMade}
+                    disabled={decisionMade || loading}
                   />
                 </div>
 
@@ -564,15 +621,24 @@ export default function SurgicalDecisionCollaboration() {
                   <Button 
                     className="bg-gradient-medical text-white"
                     onClick={handleSubmitSingleReview}
-                    disabled={!selectedSurgeryId || decisionMade}
+                    disabled={!selectedSurgeryId || decisionMade || loading}
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Submit My Review
+                    {loading ? (
+                      <>
+                        <span className="animate-spin mr-2">⟳</span>
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Submit My Review
+                      </>
+                    )}
                   </Button>
                   <Button 
                     variant="outline"
                     onClick={resetForm}
-                    disabled={totalReviews > 0}
+                    disabled={totalReviews > 0 || loading}
                   >
                     Start Over
                   </Button>
@@ -588,6 +654,7 @@ export default function SurgicalDecisionCollaboration() {
                 <Button 
                   onClick={resetForm}
                   className="mt-4"
+                  disabled={loading}
                 >
                   Review Another Case
                 </Button>
@@ -616,28 +683,30 @@ export default function SurgicalDecisionCollaboration() {
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h4 className="font-medium text-foreground">
-                        Reviewed by: {review.surgeon_name}
+                        Reviewed by: {review.surgeonName}
                       </h4>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(review.created_at).toLocaleDateString()} at {new Date(review.created_at).toLocaleTimeString()}
+                        {new Date(review.createdAt).toLocaleDateString()} at {new Date(review.createdAt).toLocaleTimeString()}
                       </p>
                     </div>
                     <Badge 
-                      variant={review.decision_status === 'accepted' ? 'default' : 'destructive'}
+                      variant={review.decisionStatus === 'ACCEPTED' ? 'default' : 'destructive'}
                       className="capitalize"
                     >
-                      {review.decision_status}
+                      {review.decisionStatus?.toLowerCase()}
                     </Badge>
                   </div>
-                  {review.factors_considered && review.factors_considered.length > 0 && (
+                  {review.factorsConsidered && Object.keys(review.factorsConsidered).length > 0 && (
                     <div className="mb-2">
                       <span className="font-medium text-sm">Factors Considered:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {review.factors_considered.map((factor: string) => (
-                          <Badge key={factor} variant="secondary" className="text-xs">
-                            {factor}
-                          </Badge>
-                        ))}
+                        {Object.entries(review.factorsConsidered)
+                          .filter(([, value]) => value === true)
+                          .map(([factor]) => (
+                            <Badge key={factor} variant="secondary" className="text-xs">
+                              {factor}
+                            </Badge>
+                          ))}
                       </div>
                     </div>
                   )}
